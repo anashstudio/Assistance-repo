@@ -43,7 +43,13 @@ function getDbConnection() {
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES   => false,
-        ];
+          {
+    name: 'install.php',
+    path: 'api/install.php',
+    description: 'صفحه نصب تحت وب، ساخت خودکار جداول دیتابیس و داشبورد پایش داده‌ها',
+    content: ', '\,
+  },
+];
         try {
             $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
         } catch (PDOException $e) {
