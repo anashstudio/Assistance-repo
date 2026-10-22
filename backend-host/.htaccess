@@ -1,0 +1,23 @@
+# --------------------------------------------------------
+# پیکربندی وب‌سرور آپاچی / لایت‌اسپید برای هاست لینوکسی
+# --------------------------------------------------------
+
+# ۱. فعال‌سازی هدرهای CORS برای ارتباط اپلیکیشن موبایل با هاست
+<IfModule mod_headers.c>
+    Header set Access-Control-Allow-Origin "*"
+    Header set Access-Control-Allow-Methods "GET, POST, OPTIONS"
+    Header set Access-Control-Allow-Headers "Content-Type, X-API-KEY, Authorization"
+</IfModule>
+
+# ۲. جلوگیری از حذف هدر Authorization و X-API-KEY توسط ماژول‌های PHP-FPM / FastCGI
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{HTTP:Authorization} ^(.*)
+    RewriteRule .* - [e=HTTP_AUTHORIZATION:%1]
+</IfModule>
+
+# ۳. محافظت امنیتی از فایل اطلاعات دیتابیس (هیچ‌کس نتواند config.php یا sql را مستقیماً دانلود کند)
+<FilesMatch "^(config\.php|database\.sql)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
