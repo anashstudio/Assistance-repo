@@ -1,0 +1,12 @@
+{
+  "name": "دستیار همراه پیشرفته",
+  "description": "سامانه مدیریت شخصی و دستیار همراه ماژولار با دیتابیس آفلاین، بیومتریک و همگام‌سازی ابری",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "clipboard-read",
+    "clipboard-write",
+    "geolocation"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

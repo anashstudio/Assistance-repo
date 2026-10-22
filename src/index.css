@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --sat: env(safe-area-inset-top, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+    --sar: env(safe-area-inset-right, 0px);
+
+    /* Theme colors defaults (dark + cyan) */
+    --app-bg: #070b14;
+    --app-card: #0d1527;
+    --app-border: #1e293b;
+    --app-text: #f8fafc;
+    --app-subtext: #94a3b8;
+    --accent-color: #06b6d4;
+  }
+
+  /* OLED Pure Black Theme */
+  [data-theme="oled"] {
+    --app-bg: #000000;
+    --app-card: #0a0a0a;
+    --app-border: #1f1f1f;
+    --app-text: #ffffff;
+    --app-subtext: #888888;
+  }
+
+  /* Light Theme */
+  [data-theme="light"] {
+    --app-bg: #f8fafc;
+    --app-card: #ffffff;
+    --app-border: #e2e8f0;
+    --app-text: #0f172a;
+    --app-subtext: #64748b;
+  }
+
+  /* Cyber Theme */
+  [data-theme="cyber"] {
+    --app-bg: #040810;
+    --app-card: #071020;
+    --app-border: #0e2a3a;
+    --app-text: #ecfeff;
+    --app-subtext: #67e8f9;
+  }
+
+  /* Accents */
+  [data-accent="cyan"] {
+    --accent-color: #06b6d4;
+  }
+  [data-accent="indigo"] {
+    --accent-color: #6366f1;
+  }
+  [data-accent="emerald"] {
+    --accent-color: #10b981;
+  }
+  [data-accent="amber"] {
+    --accent-color: #f59e0b;
+  }
+  [data-accent="rose"] {
+    --accent-color: #f43f5e;
+  }
+
+  body {
+    padding-top: var(--sat);
+    padding-bottom: var(--sab);
+    padding-left: var(--sal);
+    padding-right: var(--sar);
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Custom sleek scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.4);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--accent-color, #6366f1);
+  opacity: 0.6;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  opacity: 1;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-8px); }
+  40%, 80% { transform: translateX(8px); }
+}
+
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}
