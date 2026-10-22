@@ -5,7 +5,9 @@ import {
   Key, 
   RefreshCw, 
   CheckCircle, 
-  AlertTriangle 
+  AlertTriangle, 
+  Download, 
+  FileArchive 
 } from 'lucide-react';
 import { HostingConfig } from '../../types';
 import { 
@@ -176,6 +178,47 @@ export const HostingSyncModule: React.FC = () => {
             <span>{syncResult.message}</span>
           </div>
         )}
+      </div>
+
+      {/* Direct Host Package ZIP Download Section */}
+      <div className="p-6 rounded-3xl bg-gradient-to-br from-slate-900/90 via-[#0a1222] to-[#080d19] border border-emerald-500/30 shadow-2xl space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/20">
+              <FileArchive className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white">دانلود پکیج کامل سرور هاست (فایل ZIP)</h3>
+              <p className="text-[11px] text-slate-400">شامل تمام ۷ فایل ضروری (صفحه نصب، API، دیتابیس و کانفیگ)</p>
+            </div>
+          </div>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-bold border border-emerald-500/30">
+            ZIP آماده
+          </span>
+        </div>
+
+        <p className="text-xs text-slate-300 leading-relaxed">
+          کافیست این فایل زیپ را دانلود کرده و در پوشه <code className="text-cyan-400 font-mono">public_html/api</code> هاست خود اکسترکت (Extract) کنید. سپس آدرس <code className="text-cyan-400 font-mono">install.php</code> را در مرورگر باز کنید تا کل فرایند نصب به صورت گرافیکی و خودکار انجام شود.
+        </p>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px] text-slate-400 font-mono">
+          <span className="p-2 rounded-xl bg-slate-950 border border-slate-800 text-center">install.php</span>
+          <span className="p-2 rounded-xl bg-slate-950 border border-slate-800 text-center">index.php</span>
+          <span className="p-2 rounded-xl bg-slate-950 border border-slate-800 text-center">api.php</span>
+          <span className="p-2 rounded-xl bg-slate-950 border border-slate-800 text-center">config.php</span>
+          <span className="p-2 rounded-xl bg-slate-950 border border-slate-800 text-center">database.sql</span>
+          <span className="p-2 rounded-xl bg-slate-950 border border-slate-800 text-center">.htaccess</span>
+          <span className="p-2 rounded-xl bg-slate-950 border border-slate-800 text-center sm:col-span-2">README.md</span>
+        </div>
+
+        <a
+          href="/assistant-host-package.zip"
+          download="assistant-host-package.zip"
+          className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 active:scale-98 transition-all"
+        >
+          <Download className="w-4 h-4" />
+          <span>دانلود مستقیم فایل زیپ (assistant-host-package.zip)</span>
+        </a>
       </div>
     </div>
   );
