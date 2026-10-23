@@ -33,6 +33,7 @@ import { ContactsModule } from './components/modules/ContactsModule';
 import { HostingSyncModule } from './components/modules/HostingSyncModule';
 import { SupportModule } from './components/modules/SupportModule';
 import { AboutModule } from './components/modules/AboutModule';
+import { LibraryModule } from './components/modules/LibraryModule';
 
 const DEFAULT_THEME: ThemeConfig = {
   mode: 'dark',
@@ -275,6 +276,8 @@ export function App() {
             )}
 
             {activeTab === 'sync' && <HostingSyncModule />}
+
+            {activeTab === 'library' && <LibraryModule />}
 
             {activeTab === 'support' && (
               <SupportModule onRefreshStats={refreshStorageStats} />

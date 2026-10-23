@@ -148,4 +148,13 @@ export const INITIAL_MODULES_CONFIG: AppModuleConfig[] = [
     isEnabled: true,
     isCore: true,
   },
+  {
+    id: 'library',
+    name: 'مدیریت کتابخانه و گردش کتاب',
+    shortName: 'کتابخانه',
+    description: 'فهرست کتب، قفسه‌بندی فیزیکی، کارت اعضا، امانت و بازگشت، هشدار دیرکرد و قفسه مطالعه شخصی',
+    iconName: 'Library',
+    category: 'بهره‌وری و کار',
+    isEnabled: true,
+  },
 ];

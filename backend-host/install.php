@@ -67,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_db'])) {
 
             file_put_contents($configFile, $configContent);
 
-            $message = 'تبریک! اتصال برقرار شد، ۴ جدول دیتابیس با موفقیت ساخته شدند و فایل تنظیمات ذخیره گردید.';
+            $message = 'تبریک! اتصال برقرار شد، ۷ جدول پایگاه داده (از جمله سیستم جامع مدیریت کتابخانه و گردش کتاب) با موفقیت آماده‌سازی شدند.';
             $messageType = 'success';
             $isConfigured = true;
             $dbConnected = true;
@@ -89,24 +89,41 @@ if ($action === 'export_json' && $dbConnected && $pdo) {
         'contacts' => $pdo->query("SELECT * FROM assistant_contacts")->fetchAll(),
         'transactions' => $pdo->query("SELECT * FROM assistant_transactions")->fetchAll(),
         'tickets' => $pdo->query("SELECT * FROM assistant_tickets")->fetchAll(),
+        'books' => $pdo->query("SELECT * FROM assistant_books")->fetchAll(),
+        'members' => $pdo->query("SELECT * FROM assistant_members")->fetchAll(),
+        'loans' => $pdo->query("SELECT * FROM assistant_loans")->fetchAll(),
     ];
     echo json_encode($exportData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
     exit;
 }
 
 // محاسبه آمارها در صورت اتصال
-$stats = ['contacts' => 0, 'transactions' => 0, 'tickets' => 0];
+$stats = [
+    'contacts' => 0, 
+    'transactions' => 0, 
+    'tickets' => 0,
+    'books' => 0,
+    'members' => 0,
+    'loans' => 0
+];
 $recentTxs = [];
 $recentContacts = [];
+$recentBooks = [];
+$recentLoans = [];
 
 if ($dbConnected && $pdo) {
     try {
         $stats['contacts'] = (int)$pdo->query("SELECT COUNT(*) FROM assistant_contacts")->fetchColumn();
         $stats['transactions'] = (int)$pdo->query("SELECT COUNT(*) FROM assistant_transactions")->fetchColumn();
         $stats['tickets'] = (int)$pdo->query("SELECT COUNT(*) FROM assistant_tickets")->fetchColumn();
+        $stats['books'] = (int)$pdo->query("SELECT COUNT(*) FROM assistant_books")->fetchColumn();
+        $stats['members'] = (int)$pdo->query("SELECT COUNT(*) FROM assistant_members")->fetchColumn();
+        $stats['loans'] = (int)$pdo->query("SELECT COUNT(*) FROM assistant_loans WHERE status = 'active' OR status = 'overdue'")->fetchColumn();
         
         $recentTxs = $pdo->query("SELECT * FROM assistant_transactions ORDER BY timestamp DESC LIMIT 6")->fetchAll();
         $recentContacts = $pdo->query("SELECT * FROM assistant_contacts ORDER BY updated_at DESC LIMIT 6")->fetchAll();
+        $recentBooks = $pdo->query("SELECT * FROM assistant_books ORDER BY updated_at DESC LIMIT 6")->fetchAll();
+        $recentLoans = $pdo->query("SELECT * FROM assistant_loans WHERE status = 'active' OR status = 'overdue' ORDER BY due_date ASC LIMIT 6")->fetchAll();
     } catch (Exception $e) {}
 }
 
@@ -224,44 +241,53 @@ $activeApiKey = defined('API_SECRET_KEY') ? API_SECRET_KEY : 'COMPANION_SECURE_T
 
         <!-- Server Statistics Cards (When DB Connected) -->
         <?php if ($dbConnected): ?>
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div class="p-5 rounded-3xl bg-slate-900/80 border border-slate-800 flex items-center justify-between shadow-xl">
-                    <div>
-                        <span class="text-xs text-slate-400 block">مخاطبین ذخیره‌شده</span>
-                        <span class="text-2xl font-black text-cyan-400 font-mono mt-1 block">
-                            <?php echo number_format($stats['contacts']); ?>
-                        </span>
-                        <span class="text-[10px] text-slate-500">پشتیبان امن در سرور</span>
-                    </div>
-                    <div class="w-12 h-12 rounded-2xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center text-xl font-bold border border-cyan-500/20">
-                        👥
-                    </div>
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div class="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl">
+                    <span class="text-[11px] text-slate-400 block">مخاطبین</span>
+                    <span class="text-xl font-black text-cyan-400 font-mono mt-0.5 block">
+                        <?php echo number_format($stats['contacts']); ?>
+                    </span>
+                    <span class="text-[9px] text-slate-500">پشتیبان در سرور</span>
                 </div>
 
-                <div class="p-5 rounded-3xl bg-slate-900/80 border border-slate-800 flex items-center justify-between shadow-xl">
-                    <div>
-                        <span class="text-xs text-slate-400 block">تراکنش‌های بانکی پیامکی</span>
-                        <span class="text-2xl font-black text-emerald-400 font-mono mt-1 block">
-                            <?php echo number_format($stats['transactions']); ?>
-                        </span>
-                        <span class="text-[10px] text-slate-500">استخراج‌شده از پیامک</span>
-                    </div>
-                    <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-xl font-bold border border-emerald-500/20">
-                        💳
-                    </div>
+                <div class="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl">
+                    <span class="text-[11px] text-slate-400 block">تراکنش‌ها</span>
+                    <span class="text-xl font-black text-emerald-400 font-mono mt-0.5 block">
+                        <?php echo number_format($stats['transactions']); ?>
+                    </span>
+                    <span class="text-[9px] text-slate-500">بانکی و پیامکی</span>
                 </div>
 
-                <div class="p-5 rounded-3xl bg-slate-900/80 border border-slate-800 flex items-center justify-between shadow-xl">
-                    <div>
-                        <span class="text-xs text-slate-400 block">تیکت‌ها و پیام‌های پشتیبانی</span>
-                        <span class="text-2xl font-black text-indigo-400 font-mono mt-1 block">
-                            <?php echo number_format($stats['tickets']); ?>
-                        </span>
-                        <span class="text-[10px] text-slate-500">پیگیری‌های ارسالی از گوشی</span>
-                    </div>
-                    <div class="w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center text-xl font-bold border border-indigo-500/20">
-                        📩
-                    </div>
+                <div class="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl">
+                    <span class="text-[11px] text-slate-400 block">کتاب‌های کتابخانه</span>
+                    <span class="text-xl font-black text-amber-400 font-mono mt-0.5 block">
+                        <?php echo number_format($stats['books']); ?>
+                    </span>
+                    <span class="text-[9px] text-slate-500">نسخه ثبت‌شده</span>
+                </div>
+
+                <div class="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl">
+                    <span class="text-[11px] text-slate-400 block">اعضای کتابخانه</span>
+                    <span class="text-xl font-black text-teal-400 font-mono mt-0.5 block">
+                        <?php echo number_format($stats['members']); ?>
+                    </span>
+                    <span class="text-[9px] text-slate-500">کارت عضویت</span>
+                </div>
+
+                <div class="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl">
+                    <span class="text-[11px] text-slate-400 block">امانات فعال</span>
+                    <span class="text-xl font-black text-rose-400 font-mono mt-0.5 block">
+                        <?php echo number_format($stats['loans']); ?>
+                    </span>
+                    <span class="text-[9px] text-slate-500">در دست مطالعه</span>
+                </div>
+
+                <div class="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl">
+                    <span class="text-[11px] text-slate-400 block">تیکت‌های ارسالی</span>
+                    <span class="text-xl font-black text-indigo-400 font-mono mt-0.5 block">
+                        <?php echo number_format($stats['tickets']); ?>
+                    </span>
+                    <span class="text-[9px] text-slate-500">پشتیبانی و پیام</span>
                 </div>
             </div>
 
@@ -316,6 +342,85 @@ $activeApiKey = defined('API_SECRET_KEY') ? API_SECRET_KEY : 'COMPANION_SECURE_T
                                         <span class="font-bold <?php echo $t['type'] === 'income' ? 'text-emerald-400' : 'text-rose-400'; ?>">
                                             <?php echo ($t['type'] === 'income' ? '+ ' : '- ') . number_format($t['amount_toman']); ?> تومان
                                         </span>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Library Books & Loans Section -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Books Catalog Preview -->
+                <div class="p-5 rounded-3xl bg-slate-900/80 border border-slate-800 space-y-3 shadow-xl">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                        <h3 class="text-xs font-bold text-white flex items-center gap-2">
+                            <span>📚 کاتالوگ کتاب‌ها و قفسه‌ها</span>
+                        </h3>
+                        <span class="text-[10px] text-slate-400"><?php echo count($recentBooks); ?> کتاب اخیر</span>
+                    </div>
+                    <div class="space-y-2">
+                        <?php if (empty($recentBooks)): ?>
+                            <div class="p-6 text-center text-xs text-slate-500">هنوز کتابی در دیتابیس ثبت نشده است.</div>
+                        <?php else: ?>
+                            <?php foreach ($recentBooks as $b): ?>
+                                <div class="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 flex items-center justify-between text-xs">
+                                    <div class="space-y-0.5">
+                                        <div class="font-bold text-white flex items-center gap-2">
+                                            <span><?php echo htmlspecialchars($b['title']); ?></span>
+                                            <span class="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                                قفسه <?php echo htmlspecialchars($b['shelf_location']); ?>
+                                            </span>
+                                        </div>
+                                        <span class="text-[10px] text-slate-400 block">نویسنده: <?php echo htmlspecialchars($b['author']); ?> • دسته‌بندی: <?php echo htmlspecialchars($b['category']); ?></span>
+                                    </div>
+                                    <div class="text-left font-mono">
+                                        <span class="text-[10px] px-2 py-0.5 rounded <?php echo $b['available_copies'] > 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'; ?>">
+                                            <?php echo $b['available_copies']; ?> از <?php echo $b['total_copies']; ?> موجود
+                                        </span>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <!-- Active Loans Preview -->
+                <div class="p-5 rounded-3xl bg-slate-900/80 border border-slate-800 space-y-3 shadow-xl">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                        <h3 class="text-xs font-bold text-white flex items-center gap-2">
+                            <span>🔄 امانات جاری و سررسید بازگشت</span>
+                        </h3>
+                        <span class="text-[10px] text-slate-400"><?php echo count($recentLoans); ?> مورد فعال</span>
+                    </div>
+                    <div class="space-y-2">
+                        <?php if (empty($recentLoans)): ?>
+                            <div class="p-6 text-center text-xs text-slate-500">در حال حاضر امانت فعالی ثبت نشده است.</div>
+                        <?php else: ?>
+                            <?php foreach ($recentLoans as $l): ?>
+                                <div class="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 flex items-center justify-between text-xs">
+                                    <div class="space-y-0.5">
+                                        <span class="font-bold text-white"><?php echo htmlspecialchars($l['book_title']); ?></span>
+                                        <div class="text-[10px] text-slate-400 flex items-center gap-2">
+                                            <span>امانت‌گیرنده: <strong class="text-slate-200"><?php echo htmlspecialchars($l['member_name']); ?></strong></span>
+                                            <span class="dir-ltr text-cyan-400 font-mono"><?php echo htmlspecialchars($l['member_phone']); ?></span>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <div class="text-left font-mono text-[10px]">
+                                            <span class="<?php echo $l['status'] === 'overdue' ? 'text-rose-400 font-bold' : 'text-slate-300'; ?>">
+                                                سررسید: <?php echo htmlspecialchars($l['due_date']); ?>
+                                            </span>
+                                        </div>
+                                        <?php if (!empty($l['member_phone'])): ?>
+                                            <a href="tel:<?php echo htmlspecialchars($l['member_phone']); ?>" class="p-1 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" title="تماس">
+                                                📞
+                                            </a>
+                                            <a href="sms:<?php echo htmlspecialchars($l['member_phone']); ?>?body=<?php echo urlencode('با سلام و احترام، موعد بازگشت کتاب «' . $l['book_title'] . '» فرارسیده است. لطفاً نسبت به تمدید یا تحویل آن به کتابخانه اقدام فرمایید.'); ?>" class="p-1 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20" title="ارسال پیامک یادآوری">
+                                                💬
+                                            </a>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                             <?php endforeach; ?>

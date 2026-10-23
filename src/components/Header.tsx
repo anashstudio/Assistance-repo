@@ -33,6 +33,7 @@ const TAB_TITLES: Record<ActiveTab, string> = {
   sync: 'هاست و همگام‌سازی ابری',
   support: 'پشتیبانی فنی اختصاصی',
   about: 'تنظیمات قالب و مشخصات سازنده',
+  library: 'مدیریت کتابخانه و گردش کتاب',
 };
 
 export const Header: React.FC<HeaderProps> = ({

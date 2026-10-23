@@ -6,10 +6,12 @@
 
 ## 📁 لیست فایل‌های پکیج هاست
 
-1. `config.php`: فایل اتصال به پایگاه داده MySQL و تعیین کلید امنیتی (API Token).
-2. `api.php`: وب‌سرویس RESTful که درخواست‌های همگام‌سازی مخاطبین، تراکنش‌های بانکی و تیکت‌ها را دریافت می‌کند.
-3. `database.sql`: اسکریپت دیتابیس شامل ۴ جدول اصلی (`assistant_contacts`, `assistant_transactions`, `assistant_documents`, `assistant_tickets`).
-4. `.htaccess`: تنظیمات وب‌سرور جهت عبور هدرهای امنیتی CORS و مسدودسازی دسترسی عمومی به `config.php`.
+1. `install.php`: پنل گرافیکی و نصاب تحت‌وب خودکار، نمایش وضعیت زنده دیتابیس، آمار همگام‌سازی، کاتالوگ کتاب‌ها، اعضا و امانات کتابخانه.
+2. `config.php`: فایل اتصال به پایگاه داده MySQL و تعیین کلید امنیتی (API Token).
+3. `api.php`: وب‌سرویس RESTful که درخواست‌های همگام‌سازی مخاطبین، تراکنش‌های بانکی، تیکت‌ها و **سیستم جامع کتابخانه** را پردازش می‌کند.
+4. `database.sql`: اسکریپت دیتابیس شامل ۷ جدول (`assistant_contacts`, `assistant_transactions`, `assistant_documents`, `assistant_tickets`, `assistant_books`, `assistant_members`, `assistant_loans`).
+5. `.htaccess`: تنظیمات وب‌سرور جهت عبور هدرهای امنیتی CORS و مسدودسازی دسترسی مستقیم به `config.php`.
+6. `index.php`: ریدایرکت خودکار به صفحه نصاب و پنل مدیریت (`install.php`).
 
 ---
 

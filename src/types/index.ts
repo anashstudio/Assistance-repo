@@ -15,7 +15,8 @@ export type ActiveTab =
   | 'contacts'
   | 'sync'
   | 'support'
-  | 'about';
+  | 'about'
+  | 'library';
 
 export interface AppModuleConfig {
   id: ActiveTab;
@@ -321,4 +322,73 @@ export interface ChatMessage {
   audioDurationSeconds?: number;
   timestamp: number;
   status: 'sent' | 'delivered' | 'read';
+}
+
+// --- ماژول مدیریت کتابخانه و گردش کتاب ---
+export type BookStatus = 'available' | 'borrowed' | 'reserved' | 'lost';
+
+export interface Book {
+  id: string;
+  title: string;
+  author: string;
+  translator?: string;
+  publisher?: string;
+  isbn?: string;
+  category: string;
+  shelfLocation?: string;
+  publishYear?: string;
+  totalCopies: number;
+  availableCopies: number;
+  status: BookStatus;
+  coverUrl?: string;
+  description?: string;
+  pageCount?: number;
+  addedDate: string;
+  isDigital?: boolean;
+}
+
+export type MemberStatus = 'active' | 'suspended' | 'expired';
+
+export interface LibraryMember {
+  id: string;
+  membershipNumber: string;
+  fullName: string;
+  nationalId?: string;
+  phoneNumber: string;
+  email?: string;
+  joinDate: string;
+  expiryDate: string;
+  status: MemberStatus;
+  notes?: string;
+  avatarUrl?: string;
+  currentBorrowsCount: number;
+}
+
+export type LoanStatus = 'active' | 'returned' | 'overdue';
+
+export interface BookLoan {
+  id: string;
+  bookId: string;
+  bookTitle: string;
+  memberId: string;
+  memberName: string;
+  memberPhone: string;
+  loanDate: string;
+  dueDate: string;
+  returnDate?: string;
+  status: LoanStatus;
+  extendedCount: number;
+  fineAmountToman?: number;
+  notes?: string;
+}
+
+export interface ReadingProgress {
+  id: string;
+  bookId: string;
+  bookTitle: string;
+  currentPage: number;
+  totalPages: number;
+  percent: number;
+  quotes: { id: string; text: string; page?: number; date: string }[];
+  lastReadDate: string;
 }

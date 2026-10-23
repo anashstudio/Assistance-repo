@@ -7,7 +7,8 @@ import {
   Briefcase, 
   CloudCog, 
   Headphones,
-  Sparkles 
+  Sparkles,
+  Library 
 } from 'lucide-react';
 import { DocumentScannerModule } from './DocumentScannerModule';
 import { AppUsageModule } from './AppUsageModule';
@@ -15,9 +16,10 @@ import { VehicleModule } from './VehicleModule';
 import { MeetingsModule } from './MeetingsModule';
 import { HostingSyncModule } from './HostingSyncModule';
 import { SupportModule } from './SupportModule';
+import { LibraryModule } from './LibraryModule';
 import { vibratePhone } from '../../services/device';
 
-export type ToolsSubTab = 'scanner' | 'app_usage' | 'vehicle' | 'meetings' | 'sync' | 'support';
+export type ToolsSubTab = 'scanner' | 'app_usage' | 'vehicle' | 'meetings' | 'library' | 'sync' | 'support';
 
 interface ToolsModuleProps {
   initialSubTab?: ToolsSubTab;
@@ -52,7 +54,7 @@ export const ToolsModule: React.FC<ToolsModuleProps> = ({
         </div>
 
         {/* Sub-Navigation Pills for Tools */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-2">
           <button
             onClick={() => handleTabChange('scanner')}
             className={`py-2 px-2 rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all active:scale-95 border ${
@@ -102,6 +104,17 @@ export const ToolsModule: React.FC<ToolsModuleProps> = ({
           </button>
 
           <button
+            onClick={() => handleTabChange('library')}
+            className={`py-2 px-2 rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all active:scale-95 border ${
+              activeSubTab === 'library'
+                ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 shadow-md ring-1 ring-amber-500/30'
+                : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+            }`}
+          >
+            <Library className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="truncate">کتابخانه</span>
+          </button>
+          <button
             onClick={() => handleTabChange('sync')}
             className={`py-2 px-2 rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all active:scale-95 border ${
               activeSubTab === 'sync'
@@ -133,6 +146,7 @@ export const ToolsModule: React.FC<ToolsModuleProps> = ({
         {activeSubTab === 'app_usage' && <AppUsageModule />}
         {activeSubTab === 'vehicle' && <VehicleModule />}
         {activeSubTab === 'meetings' && <MeetingsModule />}
+        {activeSubTab === 'library' && <LibraryModule />}
         {activeSubTab === 'sync' && <HostingSyncModule />}
         {activeSubTab === 'support' && <SupportModule onRefreshStats={onRefreshStats} />}
       </div>

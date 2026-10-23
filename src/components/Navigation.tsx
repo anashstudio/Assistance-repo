@@ -40,7 +40,8 @@ export const Navigation: React.FC<NavigationProps> = ({
     activeTab === 'vehicle' || 
     activeTab === 'meetings' || 
     activeTab === 'sync' || 
-    activeTab === 'support';
+    activeTab === 'support' ||
+    activeTab === 'library';
 
   const NAV_ITEMS = [
     { 

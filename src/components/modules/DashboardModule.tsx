@@ -21,7 +21,8 @@ import {
   Layers,
   Settings,
   UserCheck,
-  Wrench
+  Wrench,
+  Library
 } from 'lucide-react';
 import { ActiveTab, AppModuleConfig, DashboardShortcut } from '../../types';
 import { localDB } from '../../services/db';
@@ -47,6 +48,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   finance: <Wallet className="w-5 h-5" />,
   personal: <UserCheck className="w-5 h-5" />,
   tools: <Wrench className="w-5 h-5" />,
+  library: <Library className="w-5 h-5" />,
   app_usage: <Smartphone className="w-5 h-5" />,
   vehicle: <Car className="w-5 h-5" />,
   health: <HeartPulse className="w-5 h-5" />,
