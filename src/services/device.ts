@@ -75,6 +75,34 @@ export function vibratePhone(durationOrPattern: number | number[] = 30): void {
 }
 
 /**
+ * Triggers native camera capture via system intent/input as bulletproof fallback
+ */
+export function triggerNativeCameraCapture(onCapture: (dataUrl: string) => void): void {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.setAttribute('capture', 'environment');
+  input.style.display = 'none';
+  document.body.appendChild(input);
+  input.onchange = (e: any) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (re) => {
+        if (re.target?.result) {
+          onCapture(re.target.result as string);
+        }
+        document.body.removeChild(input);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      document.body.removeChild(input);
+    }
+  };
+  input.click();
+}
+
+/**
  * Audio Recorder Controller with Web Audio API for visualizer
  */
 export class AudioRecorderController {

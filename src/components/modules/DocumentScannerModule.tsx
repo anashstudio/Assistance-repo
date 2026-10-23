@@ -23,7 +23,7 @@ import {
 import { jsPDF } from 'jspdf';
 import { ScannedDocumentItem, DocumentFilterType } from '../../types';
 import { localDB } from '../../services/db';
-import { vibratePhone } from '../../services/device';
+import { vibratePhone, triggerNativeCameraCapture } from '../../services/device';
 
 interface DocumentScannerModuleProps {
   onRefreshStats: () => void;
@@ -509,13 +509,36 @@ export const DocumentScannerModule: React.FC<DocumentScannerModuleProps> = ({ on
                   برای شروع اسکن متوالی اسناد و قراردادها، دوربین را روشن کرده یا عکس‌های خود را آپلود نمایید.
                 </p>
               </div>
-              <button
-                onClick={() => startCamera()}
-                className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs inline-flex items-center gap-2 shadow-lg shadow-amber-500/20 transition-all active:scale-95"
-              >
-                <Camera className="w-4 h-4" />
-                <span>شروع اسکن متوالی</span>
-              </button>
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                <button
+                  onClick={() => startCamera()}
+                  className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs inline-flex items-center gap-2 shadow-lg shadow-amber-500/20 transition-all active:scale-95"
+                >
+                  <Camera className="w-4 h-4" />
+                  <span>دوربین زنده</span>
+                </button>
+                <button
+                  onClick={() => {
+                    vibratePhone(25);
+                    triggerNativeCameraCapture(async (dataUrl) => {
+                      const processed = await applyDocumentFilter(dataUrl, activeFilter);
+                      const newPage: ScannedPageItem = {
+                        id: 'page_' + Date.now(),
+                        rawUrl: dataUrl,
+                        processedUrl: processed,
+                        filter: activeFilter,
+                      };
+                      setScannedPages((prev) => [...prev, newPage]);
+                      setSelectedPageIndex(scannedPages.length);
+                      if (!docTitle) setDocTitle('سند اسکن‌شده ' + new Date().toLocaleDateString('fa-IR'));
+                    });
+                  }}
+                  className="px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs inline-flex items-center gap-2 border border-slate-700 transition-all active:scale-95"
+                >
+                  <Camera className="w-4 h-4 text-amber-400" />
+                  <span>عکس با دوربین دستگاه</span>
+                </button>
+              </div>
             </div>
           )}
 

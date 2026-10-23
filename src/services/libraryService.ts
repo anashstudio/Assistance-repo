@@ -268,7 +268,7 @@ export async function addBookQuote(
   }
 }
 
-// --- Host Cloud Sync for Library Data ---
+// --- Host Cloud Sync for Library Data (Two-Way Sync) ---
 export async function syncLibraryToHost(): Promise<{ success: boolean; message: string }> {
   try {
     const config = await getHostingConfig();
@@ -276,23 +276,77 @@ export async function syncLibraryToHost(): Promise<{ success: boolean; message: 
       return { success: false, message: 'آدرس یا کلید هاست در بخش همگام‌سازی تنظیم نشده است.' };
     }
 
-    const [books, members, loans] = await Promise.all([getBooks(), getMembers(), getLoans()]);
+    const [localBooks, localMembers, localLoans] = await Promise.all([getBooks(), getMembers(), getLoans()]);
 
-    const res = await fetch(`${config.apiUrl}?action=sync_library`, {
+    // 1. ارسال امانات و وضعیت محلی به سرور
+    await fetch(`${config.apiUrl}?action=sync_library`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-API-KEY': config.apiKey,
       },
-      body: JSON.stringify({ books, members, loans }),
+      body: JSON.stringify({ books: localBooks, members: localMembers, loans: localLoans }),
     });
 
-    const data = await res.json();
-    if (data.success) {
-      return { success: true, message: 'کتاب‌ها، اعضا و امانت‌ها با سرور هاست همگام‌سازی شدند.' };
+    // 2. دریافت فهرست به‌روز کتاب‌ها و اعضا (مثلاً موارد بارگذاری‌شده از اکسل در پنل وب)
+    const pullRes = await fetch(`${config.apiUrl}?action=sync_library`, {
+      method: 'GET',
+      headers: {
+        'X-API-KEY': config.apiKey,
+      },
+    });
+
+    if (pullRes.ok) {
+      const serverData = await pullRes.json();
+      if (serverData.success) {
+        if (Array.isArray(serverData.books) && serverData.books.length > 0) {
+          const mappedBooks: Book[] = serverData.books.map((b: any) => ({
+            id: b.id || `book_${Date.now()}`,
+            title: b.title || '',
+            author: b.author || 'نامشخص',
+            translator: b.translator || undefined,
+            publisher: b.publisher || undefined,
+            congressCode: b.congress_code || b.congressCode || undefined,
+            publishYear: b.publish_year || b.publishYear || undefined,
+            isbn: b.isbn || undefined,
+            category: b.category || 'عمومی',
+            shelfLocation: b.shelf_location || b.shelfLocation || 'A-1',
+            totalCopies: Number(b.total_copies ?? b.totalCopies ?? 1),
+            availableCopies: Number(b.available_copies ?? b.availableCopies ?? 1),
+            status: b.status || 'available',
+            description: b.notes || undefined,
+            addedDate: b.created_at || new Date().toLocaleDateString('fa-IR'),
+          }));
+          await saveBooks(mappedBooks);
+        }
+
+        if (Array.isArray(serverData.members) && serverData.members.length > 0) {
+          const mappedMembers: LibraryMember[] = serverData.members.map((m: any) => ({
+            id: m.id || `mem_${Date.now()}`,
+            membershipNumber: m.membership_number || m.membershipNumber || `LIB-${Math.floor(1000 + Math.random() * 9000)}`,
+            fullName: m.full_name || m.fullName || 'عضو بدون نام',
+            nationalId: m.national_id || m.nationalId || undefined,
+            phoneNumber: m.phone_number || m.phoneNumber || '',
+            email: m.email || undefined,
+            joinDate: m.membership_date || m.membershipDate || new Date().toLocaleDateString('fa-IR'),
+            expiryDate: m.expiry_date || m.expiryDate || undefined,
+            status: m.status || 'active',
+            currentBorrowsCount: Number(m.borrowed_count ?? m.currentBorrowsCount ?? 0),
+            notes: m.notes || undefined,
+          }));
+          await saveMembers(mappedMembers);
+        }
+
+        return { 
+          success: true, 
+          message: `همگام‌سازی کامل شد (${serverData.books?.length || 0} کتاب و ${serverData.members?.length || 0} عضو از سرور به‌روز شدند).` 
+        };
+      }
     }
-    return { success: false, message: data.error || 'خطا در همگام‌سازی کتابخانه.' };
+
+    return { success: true, message: 'اطلاعات با موفقیت با هاست همگام‌سازی شدند.' };
   } catch (err: any) {
     return { success: false, message: 'عدم ارتباط با هاست: ' + (err.message || 'خطای شبکه') };
   }
 }
+

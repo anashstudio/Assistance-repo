@@ -10,7 +10,8 @@ import {
   Mail, 
   Star, 
   Check, 
-  Tag 
+  Tag,
+  Upload
 } from 'lucide-react';
 import { ContactItem } from '../../types';
 import { localDB } from '../../services/db';
@@ -62,6 +63,58 @@ export const ContactsModule: React.FC<ContactsModuleProps> = ({
       setEmail(nativeContact.email || '');
       setShowAddModal(true);
     }
+  };
+
+  const handleImportVcardOrCsv = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (re) => {
+      const text = re.target?.result as string;
+      if (!text) return;
+      const newItems: ContactItem[] = [];
+      if (file.name.toLowerCase().endsWith('.vcf') || text.includes('BEGIN:VCARD')) {
+        const cards = text.split(/BEGIN:VCARD/i);
+        for (const card of cards) {
+          const fnMatch = card.match(/FN[;:]([^\r\n]+)/i);
+          const telMatch = card.match(/TEL[^:]*:([^\r\n]+)/i);
+          if (fnMatch && telMatch) {
+            newItems.push({
+              id: 'cnt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+              name: fnMatch[1].trim(),
+              phoneNumber: telMatch[1].trim(),
+              category: 'شخصی',
+              createdAt: Date.now(),
+            });
+          }
+        }
+      } else {
+        const lines = text.split(/\r?\n/);
+        for (const line of lines) {
+          const parts = line.split(',');
+          if (parts.length >= 2 && parts[0].trim() && parts[1].trim()) {
+            newItems.push({
+              id: 'cnt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+              name: parts[0].trim(),
+              phoneNumber: parts[1].trim(),
+              email: parts[2]?.trim() || undefined,
+              category: 'شخصی',
+              createdAt: Date.now(),
+            });
+          }
+        }
+      }
+      if (newItems.length > 0) {
+        for (const item of newItems) {
+          await localDB.saveContact(item);
+        }
+        await loadContacts();
+        onRefreshStats();
+        vibratePhone(40);
+        alert(`${newItems.length} مخاطب با موفقیت وارد شدند.`);
+      }
+    };
+    reader.readAsText(file);
   };
 
   const handleSaveContact = async () => {
@@ -134,9 +187,20 @@ export const ContactsModule: React.FC<ContactsModuleProps> = ({
               title="انتخاب از دفترچه تلفن داخلی گوشی"
             >
               <Smartphone className="w-4 h-4 text-indigo-400" />
-              <span>دفترچه تلفن گوشی</span>
+              <span>دفترچه تلفن</span>
             </button>
           )}
+
+          <label className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold cursor-pointer transition-all active:scale-95" title="ورود از فایل vCard یا CSV">
+            <Upload className="w-4 h-4 text-cyan-400" />
+            <span>فایل مخاطب</span>
+            <input
+              type="file"
+              accept=".vcf,.csv"
+              onChange={handleImportVcardOrCsv}
+              className="hidden"
+            />
+          </label>
 
           <button
             onClick={() => {

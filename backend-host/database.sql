@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS `assistant_books` (
   `author` varchar(255) NOT NULL,
   `translator` varchar(255) DEFAULT NULL,
   `publisher` varchar(255) DEFAULT NULL,
+  `congress_code` varchar(64) DEFAULT NULL,
   `publish_year` varchar(32) DEFAULT NULL,
   `isbn` varchar(64) DEFAULT NULL,
   `category` varchar(64) NOT NULL,
@@ -83,7 +84,8 @@ CREATE TABLE IF NOT EXISTS `assistant_books` (
   `updated_at` datetime NOT NULL,
   PRIMARY KEY (`id`),
   KEY `book_cat_idx` (`category`),
-  KEY `shelf_idx` (`shelf_location`)
+  KEY `shelf_idx` (`shelf_location`),
+  KEY `congress_idx` (`congress_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ۶. جدول اعضای کتابخانه
@@ -126,4 +128,13 @@ CREATE TABLE IF NOT EXISTS `assistant_loans` (
   KEY `loan_member_idx` (`member_id`),
   KEY `loan_status_idx` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ۸. جدول تنظیمات کلان و پیکربندی سامانه
+CREATE TABLE IF NOT EXISTS `assistant_settings` (
+  `setting_key` varchar(64) NOT NULL,
+  `setting_value` text NOT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`setting_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 

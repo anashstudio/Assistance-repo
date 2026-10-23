@@ -333,9 +333,10 @@ export interface Book {
   author: string;
   translator?: string;
   publisher?: string;
+  congressCode?: string; // کد رده‌بندی کنگره (LCC)
   isbn?: string;
   category: string;
-  shelfLocation?: string;
+  shelfLocation?: string; // کد قفسه فیزیکی
   publishYear?: string;
   totalCopies: number;
   availableCopies: number;
@@ -378,6 +379,7 @@ export interface BookLoan {
   returnDate?: string;
   status: LoanStatus;
   extendedCount: number;
+  renewCount?: number;
   fineAmountToman?: number;
   notes?: string;
 }

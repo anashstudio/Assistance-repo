@@ -167,13 +167,14 @@ switch ($action) {
             // ۱. ثبت و به‌روزرسانی کتاب‌ها
             if (!empty($books)) {
                 $stmtBook = $pdo->prepare("
-                    INSERT INTO assistant_books (id, title, author, translator, publisher, publish_year, isbn, category, shelf_location, total_copies, available_copies, status, tags, notes, created_at, updated_at)
-                    VALUES (:id, :title, :author, :translator, :publisher, :publish_year, :isbn, :category, :shelf_location, :total_copies, :available_copies, :status, :tags, :notes, NOW(), NOW())
+                    INSERT INTO assistant_books (id, title, author, translator, publisher, congress_code, publish_year, isbn, category, shelf_location, total_copies, available_copies, status, tags, notes, created_at, updated_at)
+                    VALUES (:id, :title, :author, :translator, :publisher, :congress_code, :publish_year, :isbn, :category, :shelf_location, :total_copies, :available_copies, :status, :tags, :notes, NOW(), NOW())
                     ON DUPLICATE KEY UPDATE
                         title = VALUES(title),
                         author = VALUES(author),
                         translator = VALUES(translator),
                         publisher = VALUES(publisher),
+                        congress_code = VALUES(congress_code),
                         publish_year = VALUES(publish_year),
                         isbn = VALUES(isbn),
                         category = VALUES(category),
@@ -194,12 +195,13 @@ switch ($action) {
                             ':author' => $b['author'] ?? 'نامشخص',
                             ':translator' => $b['translator'] ?? null,
                             ':publisher' => $b['publisher'] ?? null,
-                            ':publish_year' => $b['publishYear'] ?? null,
+                            ':congress_code' => $b['congressCode'] ?? $b['congress_code'] ?? null,
+                            ':publish_year' => $b['publishYear'] ?? $b['publish_year'] ?? null,
                             ':isbn' => $b['isbn'] ?? null,
                             ':category' => $b['category'] ?? 'عمومی',
-                            ':shelf_location' => $b['shelfLocation'] ?? 'A-1',
-                            ':total_copies' => (int)($b['totalCopies'] ?? 1),
-                            ':available_copies' => (int)($b['availableCopies'] ?? 1),
+                            ':shelf_location' => $b['shelfLocation'] ?? $b['shelf_location'] ?? 'A-1',
+                            ':total_copies' => (int)($b['totalCopies'] ?? $b['total_copies'] ?? 1),
+                            ':available_copies' => (int)($b['availableCopies'] ?? $b['available_copies'] ?? 1),
                             ':status' => $b['status'] ?? 'available',
                             ':tags' => is_array($b['tags'] ?? null) ? implode(',', $b['tags']) : ($b['tags'] ?? null),
                             ':notes' => $b['notes'] ?? null,
@@ -331,6 +333,54 @@ switch ($action) {
                 'server_time' => date('Y-m-d H:i:s'),
             ]
         ], JSON_UNESCAPED_UNICODE);
+        break;
+
+    // ۷. دریافت تنظیمات سراسری سیستم از هاست
+    case 'get_settings':
+        try {
+            $stmt = $pdo->query("SELECT setting_key, setting_value FROM assistant_settings");
+            $rows = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+            echo json_encode(['success' => true, 'settings' => $rows], JSON_UNESCAPED_UNICODE);
+        } catch (Exception $e) {
+            echo json_encode(['success' => true, 'settings' => []], JSON_UNESCAPED_UNICODE);
+        }
+        break;
+
+    // ۸. ذخیره و به‌روزرسانی تنظیمات سیستم
+    case 'save_settings':
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $input = json_decode(file_get_contents('php://input'), true);
+            $settings = $input['settings'] ?? [];
+            $stmt = $pdo->prepare("
+                INSERT INTO assistant_settings (setting_key, setting_value, updated_at)
+                VALUES (:k, :v, NOW())
+                ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = NOW()
+            ");
+            foreach ($settings as $k => $v) {
+                $stmt->execute([':k' => $k, ':v' => is_string($v) ? $v : json_encode($v, JSON_UNESCAPED_UNICODE)]);
+            }
+            echo json_encode(['success' => true, 'message' => 'تنظیمات سامانه ذخیره شدند.'], JSON_UNESCAPED_UNICODE);
+        }
+        break;
+
+    // ۹. حذف کتاب از سرور
+    case 'delete_book':
+        $bookId = $_GET['id'] ?? '';
+        if ($bookId) {
+            $stmt = $pdo->prepare("DELETE FROM assistant_books WHERE id = :id");
+            $stmt->execute([':id' => $bookId]);
+            echo json_encode(['success' => true, 'message' => 'کتاب با موفقیت حذف شد.'], JSON_UNESCAPED_UNICODE);
+        }
+        break;
+
+    // ۱۰. حذف عضو از سرور
+    case 'delete_member':
+        $memberId = $_GET['id'] ?? '';
+        if ($memberId) {
+            $stmt = $pdo->prepare("DELETE FROM assistant_members WHERE id = :id");
+            $stmt->execute([':id' => $memberId]);
+            echo json_encode(['success' => true, 'message' => 'عضو با موفقیت حذف شد.'], JSON_UNESCAPED_UNICODE);
+        }
         break;
 
     default:
