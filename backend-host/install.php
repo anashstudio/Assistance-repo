@@ -22,10 +22,89 @@ if (file_exists($configFile)) {
         try {
             $pdo = getDbConnection();
             $dbConnected = true;
+            autoMigrateDatabase($pdo);
         } catch (Exception $e) {
             $dbError = $e->getMessage();
         }
     }
+}
+
+/**
+ * بروزرسانی خودکار ساختار جداول دیتابیس (جلوگیری از خطای ستون‌های ناشناخته)
+ */
+function autoMigrateDatabase($pdo) {
+    if (!$pdo) return;
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM assistant_books")->fetchAll(PDO::FETCH_COLUMN);
+        if ($cols && count($cols) > 0) {
+            if (!in_array('translator', $cols)) {
+                $pdo->exec("ALTER TABLE `assistant_books` ADD COLUMN `translator` varchar(255) DEFAULT NULL AFTER `author`");
+            }
+            if (!in_array('publisher', $cols)) {
+                $pdo->exec("ALTER TABLE `assistant_books` ADD COLUMN `publisher` varchar(255) DEFAULT NULL AFTER `translator`");
+            }
+            if (!in_array('congress_code', $cols)) {
+                $pdo->exec("ALTER TABLE `assistant_books` ADD COLUMN `congress_code` varchar(64) DEFAULT NULL AFTER `publisher`");
+            }
+            if (!in_array('publish_year', $cols)) {
+                $pdo->exec("ALTER TABLE `assistant_books` ADD COLUMN `publish_year` varchar(32) DEFAULT NULL AFTER `congress_code`");
+            }
+            if (!in_array('isbn', $cols)) {
+                $pdo->exec("ALTER TABLE `assistant_books` ADD COLUMN `isbn` varchar(64) DEFAULT NULL AFTER `publish_year`");
+            }
+            if (!in_array('shelf_location', $cols)) {
+                $pdo->exec("ALTER TABLE `assistant_books` ADD COLUMN `shelf_location` varchar(128) NOT NULL DEFAULT 'A-1' AFTER `category`");
+            }
+            if (!in_array('total_copies', $cols)) {
+                $pdo->exec("ALTER TABLE `assistant_books` ADD COLUMN `total_copies` int(11) NOT NULL DEFAULT 1 AFTER `shelf_location`");
+            }
+            if (!in_array('available_copies', $cols)) {
+                $pdo->exec("ALTER TABLE `assistant_books` ADD COLUMN `available_copies` int(11) NOT NULL DEFAULT 1 AFTER `total_copies`");
+            }
+            if (!in_array('category', $cols)) {
+                $pdo->exec("ALTER TABLE `assistant_books` ADD COLUMN `category` varchar(64) NOT NULL DEFAULT 'عمومی' AFTER `publish_year`");
+            }
+        }
+    } catch (Exception $e) {}
+
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `assistant_settings` (
+              `setting_key` varchar(64) NOT NULL,
+              `setting_value` longtext DEFAULT NULL,
+              `updated_at` datetime NOT NULL,
+              PRIMARY KEY (`setting_key`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        ");
+    } catch (Exception $e) {}
+
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `assistant_books` (
+              `id` varchar(64) NOT NULL,
+              `title` varchar(255) NOT NULL,
+              `author` varchar(255) NOT NULL,
+              `translator` varchar(255) DEFAULT NULL,
+              `publisher` varchar(255) DEFAULT NULL,
+              `congress_code` varchar(64) DEFAULT NULL,
+              `publish_year` varchar(32) DEFAULT NULL,
+              `isbn` varchar(64) DEFAULT NULL,
+              `category` varchar(64) NOT NULL DEFAULT 'عمومی',
+              `shelf_location` varchar(128) NOT NULL DEFAULT 'A-1',
+              `total_copies` int(11) NOT NULL DEFAULT 1,
+              `available_copies` int(11) NOT NULL DEFAULT 1,
+              `status` enum('available','borrowed','reserved','lost') DEFAULT 'available',
+              `tags` text DEFAULT NULL,
+              `notes` text DEFAULT NULL,
+              `created_at` datetime NOT NULL,
+              `updated_at` datetime NOT NULL,
+              PRIMARY KEY (`id`),
+              KEY `book_cat_idx` (`category`),
+              KEY `shelf_idx` (`shelf_location`),
+              KEY `congress_idx` (`congress_code`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        ");
+    } catch (Exception $e) {}
 }
 
 $action = $_GET['action'] ?? '';
@@ -138,221 +217,308 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // ۲. ورود دسته‌جمعی کتب از اکسل / CSV
-    if (isset($_POST['import_books_excel']) && $dbConnected && $pdo) {
+    if (isset($_POST['import_books_excel'])) {
         $tab = 'books';
-        $csvText = '';
-        if (!empty($_FILES['books_csv_file']['tmp_name'])) {
-            $csvText = file_get_contents($_FILES['books_csv_file']['tmp_name']);
-        } elseif (!empty($_POST['books_csv_paste'])) {
-            $csvText = trim($_POST['books_csv_paste']);
-        }
-
-        if (empty($csvText)) {
-            $message = 'فایلی برای آپلود انتخاب نشده یا متنی پیست نگردیده است.';
+        if (!$dbConnected || !$pdo) {
+            $message = 'اتصال به دیتابیس برقرار نیست! لطفاً ابتدا از تب «اتصال دیتابیس و توکن» پایگاه داده را پیکربندی نمایید.';
             $messageType = 'error';
         } else {
-            // حذف BOM
-            $csvText = preg_replace('/^\xEF\xBB\xBF/', '', $csvText);
-            $lines = preg_split('/\r\n|\r|\n/', $csvText);
-            $imported = 0;
+            $csvText = '';
+            if (!empty($_FILES['books_csv_file']['tmp_name']) && is_uploaded_file($_FILES['books_csv_file']['tmp_name'])) {
+                $csvText = file_get_contents($_FILES['books_csv_file']['tmp_name']);
+            } elseif (!empty($_POST['books_csv_paste'])) {
+                $csvText = trim($_POST['books_csv_paste']);
+            }
 
-            $stmt = $pdo->prepare("
-                INSERT INTO assistant_books (id, title, author, translator, publisher, congress_code, shelf_location, publish_year, total_copies, available_copies, category, status, created_at, updated_at)
-                VALUES (:id, :title, :author, :translator, :publisher, :congress_code, :shelf_location, :publish_year, :total_copies, :available_copies, 'عمومی', 'available', NOW(), NOW())
-                ON DUPLICATE KEY UPDATE
-                    author = VALUES(author),
-                    translator = VALUES(translator),
-                    publisher = VALUES(publisher),
-                    congress_code = VALUES(congress_code),
-                    shelf_location = VALUES(shelf_location),
-                    publish_year = VALUES(publish_year),
-                    total_copies = VALUES(total_copies),
-                    available_copies = VALUES(available_copies),
-                    updated_at = NOW()
-            ");
+            if (empty(trim($csvText))) {
+                $message = 'فایلی برای آپلود انتخاب نشده یا متنی در کادر پیست نگردیده است.';
+                $messageType = 'error';
+            } else {
+                try {
+                    autoMigrateDatabase($pdo);
+                    // حذف BOM و نرمال‌سازی انتهای خطوط
+                    $csvText = preg_replace('/^\xEF\xBB\xBF/', '', $csvText);
+                    $lines = preg_split('/\r\n|\r|\n/', $csvText);
+                    $imported = 0;
 
-            foreach ($lines as $i => $line) {
-                if (empty(trim($line))) continue;
-                $cols = str_getcsv($line);
-                // رد کردن خط سربرگ (هدر)
-                if ($i === 0 && (strpos($cols[0], 'عنوان') !== false || strpos(strtolower($cols[0]), 'title') !== false)) {
-                    continue;
+                    $stmt = $pdo->prepare("
+                        INSERT INTO assistant_books (id, title, author, translator, publisher, congress_code, shelf_location, publish_year, total_copies, available_copies, category, status, created_at, updated_at)
+                        VALUES (:id, :title, :author, :translator, :publisher, :congress_code, :shelf_location, :publish_year, :total_copies, :available_copies, 'عمومی', 'available', NOW(), NOW())
+                        ON DUPLICATE KEY UPDATE
+                            author = VALUES(author),
+                            translator = VALUES(translator),
+                            publisher = VALUES(publisher),
+                            congress_code = VALUES(congress_code),
+                            shelf_location = VALUES(shelf_location),
+                            publish_year = VALUES(publish_year),
+                            total_copies = VALUES(total_copies),
+                            available_copies = VALUES(available_copies),
+                            updated_at = NOW()
+                    ");
+
+                    foreach ($lines as $i => $line) {
+                        $line = trim($line);
+                        if (empty($line)) continue;
+
+                        // تشخیص هوشمند جداکننده (کاما، سمیکالن، تب، پایپ)
+                        $delims = [',', ';', "\t", '|'];
+                        $bestDelim = ',';
+                        $bestCount = 0;
+                        foreach ($delims as $d) {
+                            $cnt = substr_count($line, $d);
+                            if ($cnt > $bestCount) {
+                                $bestCount = $cnt;
+                                $bestDelim = $d;
+                            }
+                        }
+
+                        $cols = str_getcsv($line, $bestDelim);
+                        if (empty($cols) || empty(trim($cols[0] ?? ''))) continue;
+
+                        // رد کردن خط سربرگ در سطر اول
+                        if ($i === 0) {
+                            $h = mb_strtolower(trim($cols[0]));
+                            if (strpos($h, 'عنوان') !== false || strpos($h, 'کتاب') !== false || strpos($h, 'title') !== false || strpos($h, 'ردیف') !== false) {
+                                continue;
+                            }
+                        }
+
+                        $title = trim($cols[0] ?? '', " \t\n\r\0\x0B\"'");
+                        $author = trim($cols[1] ?? '', " \t\n\r\0\x0B\"'");
+                        if (empty($author)) $author = 'نامشخص';
+                        $translator = trim($cols[2] ?? '', " \t\n\r\0\x0B\"'");
+                        $publisher = trim($cols[3] ?? '', " \t\n\r\0\x0B\"'");
+                        $congressCode = trim($cols[4] ?? '', " \t\n\r\0\x0B\"'");
+                        $shelfLoc = trim($cols[5] ?? '', " \t\n\r\0\x0B\"'");
+                        if (empty($shelfLoc)) $shelfLoc = 'A-1';
+                        $year = trim($cols[6] ?? '', " \t\n\r\0\x0B\"'");
+                        $copiesRaw = trim($cols[7] ?? '1');
+                        $copies = (int)preg_replace('/[^0-9]/', '', str_replace(['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'], ['0','1','2','3','4','5','6','7','8','9'], $copiesRaw));
+                        if ($copies <= 0) $copies = 1;
+
+                        if (!empty($title)) {
+                            $bookId = 'book_' . md5($title . '_' . $author . '_' . $congressCode . '_' . $shelfLoc);
+                            $stmt->execute([
+                                ':id' => $bookId,
+                                ':title' => $title,
+                                ':author' => $author,
+                                ':translator' => $translator ?: null,
+                                ':publisher' => $publisher ?: null,
+                                ':congress_code' => $congressCode ?: null,
+                                ':shelf_location' => $shelfLoc,
+                                ':publish_year' => $year ?: null,
+                                ':total_copies' => $copies,
+                                ':available_copies' => $copies,
+                            ]);
+                            $imported++;
+                        }
+                    }
+
+                    $message = "تعداد {$imported} کتاب با موفقیت از فایل اکسل/CSV وارد پایگاه داده سرور شدند.";
+                    $messageType = 'success';
+                } catch (Exception $e) {
+                    $message = 'خطا در پردازش یا ثبت کتب اکسل: ' . $e->getMessage();
+                    $messageType = 'error';
                 }
+            }
+        }
+    }
 
-                $title = trim($cols[0] ?? '');
-                $author = trim($cols[1] ?? 'نامشخص');
-                $translator = trim($cols[2] ?? '');
-                $publisher = trim($cols[3] ?? '');
-                $congressCode = trim($cols[4] ?? '');
-                $shelfLoc = trim($cols[5] ?? 'A-1');
-                $year = trim($cols[6] ?? '');
-                $copies = (int)($cols[7] ?? 1);
-                if ($copies <= 0) $copies = 1;
+    // ۳. ثبت تکی کتاب جدید در پنل
+    if (isset($_POST['add_single_book'])) {
+        $tab = 'books';
+        if (!$dbConnected || !$pdo) {
+            $message = 'اتصال به دیتابیس برقرار نیست! لطفاً ابتدا از تب «اتصال دیتابیس و توکن» پایگاه داده را پیکربندی نمایید.';
+            $messageType = 'error';
+        } else {
+            $title = trim($_POST['title'] ?? '');
+            $author = trim($_POST['author'] ?? '');
+            $translator = trim($_POST['translator'] ?? '');
+            $publisher = trim($_POST['publisher'] ?? '');
+            $congressCode = trim($_POST['congress_code'] ?? '');
+            $shelfLoc = trim($_POST['shelf_location'] ?? 'A-1');
+            $year = trim($_POST['publish_year'] ?? '');
+            $copies = (int)($_POST['total_copies'] ?? 1);
+            $category = trim($_POST['category'] ?? 'عمومی');
 
-                if (!empty($title)) {
-                    $bookId = 'book_' . md5($title . '_' . $author . '_' . $congressCode);
+            if (empty($title)) {
+                $message = 'عنوان کتاب الزامی است.';
+                $messageType = 'error';
+            } else {
+                try {
+                    autoMigrateDatabase($pdo);
+                    $stmt = $pdo->prepare("
+                        INSERT INTO assistant_books (id, title, author, translator, publisher, congress_code, shelf_location, publish_year, total_copies, available_copies, category, status, created_at, updated_at)
+                        VALUES (:id, :title, :author, :translator, :publisher, :congress_code, :shelf_location, :publish_year, :total_copies, :available_copies, :category, 'available', NOW(), NOW())
+                    ");
+                    $bookId = 'book_' . uniqid('', true);
                     $stmt->execute([
                         ':id' => $bookId,
                         ':title' => $title,
-                        ':author' => $author,
+                        ':author' => $author ?: 'نامشخص',
                         ':translator' => $translator ?: null,
                         ':publisher' => $publisher ?: null,
                         ':congress_code' => $congressCode ?: null,
                         ':shelf_location' => $shelfLoc ?: 'A-1',
                         ':publish_year' => $year ?: null,
-                        ':total_copies' => $copies,
-                        ':available_copies' => $copies,
+                        ':total_copies' => $copies > 0 ? $copies : 1,
+                        ':available_copies' => $copies > 0 ? $copies : 1,
+                        ':category' => $category ?: 'عمومی',
                     ]);
-                    $imported++;
+                    $message = "کتاب «{$title}» با موفقیت در کاتالوگ سرور ثبت گردید.";
+                    $messageType = 'success';
+                } catch (Exception $e) {
+                    $message = 'خطا در ثبت کتاب در دیتابیس: ' . $e->getMessage();
+                    $messageType = 'error';
                 }
             }
-
-            $message = "تعداد {$imported} کتاب با موفقیت از اکسل/CSV وارد پایگاه داده سرور شدند.";
-            $messageType = 'success';
-        }
-    }
-
-    // ۳. ثبت تکی کتاب جدید
-    if (isset($_POST['add_single_book']) && $dbConnected && $pdo) {
-        $tab = 'books';
-        $title = trim($_POST['title'] ?? '');
-        $author = trim($_POST['author'] ?? '');
-        $translator = trim($_POST['translator'] ?? '');
-        $publisher = trim($_POST['publisher'] ?? '');
-        $congressCode = trim($_POST['congress_code'] ?? '');
-        $shelfLoc = trim($_POST['shelf_location'] ?? 'A-1');
-        $year = trim($_POST['publish_year'] ?? '');
-        $copies = (int)($_POST['total_copies'] ?? 1);
-        $category = trim($_POST['category'] ?? 'عمومی');
-
-        if (empty($title)) {
-            $message = 'نام کتاب الزامی است.';
-            $messageType = 'error';
-        } else {
-            $stmt = $pdo->prepare("
-                INSERT INTO assistant_books (id, title, author, translator, publisher, congress_code, shelf_location, publish_year, total_copies, available_copies, category, status, created_at, updated_at)
-                VALUES (:id, :title, :author, :translator, :publisher, :congress_code, :shelf_location, :publish_year, :total_copies, :available_copies, :category, 'available', NOW(), NOW())
-            ");
-            $bookId = 'book_' . uniqid('', true);
-            $stmt->execute([
-                ':id' => $bookId,
-                ':title' => $title,
-                ':author' => $author ?: 'نامشخص',
-                ':translator' => $translator ?: null,
-                ':publisher' => $publisher ?: null,
-                ':congress_code' => $congressCode ?: null,
-                ':shelf_location' => $shelfLoc ?: 'A-1',
-                ':publish_year' => $year ?: null,
-                ':total_copies' => $copies > 0 ? $copies : 1,
-                ':available_copies' => $copies > 0 ? $copies : 1,
-                ':category' => $category,
-            ]);
-            $message = 'کتاب جدید با موفقیت در کاتالوگ ثبت گردید.';
-            $messageType = 'success';
         }
     }
 
     // ۴. ورود دسته‌جمعی اعضای کتابخانه از اکسل / CSV
-    if (isset($_POST['import_members_excel']) && $dbConnected && $pdo) {
+    if (isset($_POST['import_members_excel'])) {
         $tab = 'members';
-        $csvText = '';
-        if (!empty($_FILES['members_csv_file']['tmp_name'])) {
-            $csvText = file_get_contents($_FILES['members_csv_file']['tmp_name']);
-        } elseif (!empty($_POST['members_csv_paste'])) {
-            $csvText = trim($_POST['members_csv_paste']);
-        }
-
-        if (empty($csvText)) {
-            $message = 'فایلی برای آپلود انتخاب نشده یا متنی پیست نگردیده است.';
+        if (!$dbConnected || !$pdo) {
+            $message = 'اتصال به دیتابیس برقرار نیست! لطفاً ابتدا از تب «اتصال دیتابیس و توکن» پایگاه داده را متصل نمایید.';
             $messageType = 'error';
         } else {
-            $csvText = preg_replace('/^\xEF\xBB\xBF/', '', $csvText);
-            $lines = preg_split('/\r\n|\r|\n/', $csvText);
-            $imported = 0;
+            $csvText = '';
+            if (!empty($_FILES['members_csv_file']['tmp_name']) && is_uploaded_file($_FILES['members_csv_file']['tmp_name'])) {
+                $csvText = file_get_contents($_FILES['members_csv_file']['tmp_name']);
+            } elseif (!empty($_POST['members_csv_paste'])) {
+                $csvText = trim($_POST['members_csv_paste']);
+            }
 
-            $stmt = $pdo->prepare("
-                INSERT INTO assistant_members (id, membership_number, full_name, national_id, phone_number, email, membership_date, status, borrowed_count, created_at)
-                VALUES (:id, :membership_number, :full_name, :national_id, :phone_number, :email, NOW(), 'active', 0, NOW())
-                ON DUPLICATE KEY UPDATE
-                    full_name = VALUES(full_name),
-                    national_id = VALUES(national_id),
-                    phone_number = VALUES(phone_number),
-                    email = VALUES(email)
-            ");
+            if (empty(trim($csvText))) {
+                $message = 'فایلی برای آپلود انتخاب نشده یا متنی در کادر پیست نگردیده است.';
+                $messageType = 'error';
+            } else {
+                try {
+                    autoMigrateDatabase($pdo);
+                    $csvText = preg_replace('/^\xEF\xBB\xBF/', '', $csvText);
+                    $lines = preg_split('/\r\n|\r|\n/', $csvText);
+                    $imported = 0;
 
-            foreach ($lines as $i => $line) {
-                if (empty(trim($line))) continue;
-                $cols = str_getcsv($line);
-                if ($i === 0 && (strpos($cols[0], 'شماره') !== false || strpos(strtolower($cols[0]), 'member') !== false)) {
-                    continue;
+                    $stmt = $pdo->prepare("
+                        INSERT INTO assistant_members (id, membership_number, full_name, national_id, phone_number, email, membership_date, status, borrowed_count, created_at)
+                        VALUES (:id, :membership_number, :full_name, :national_id, :phone_number, :email, NOW(), 'active', 0, NOW())
+                        ON DUPLICATE KEY UPDATE
+                            full_name = VALUES(full_name),
+                            national_id = VALUES(national_id),
+                            phone_number = VALUES(phone_number),
+                            email = VALUES(email)
+                    ");
+
+                    foreach ($lines as $i => $line) {
+                        $line = trim($line);
+                        if (empty($line)) continue;
+
+                        $delims = [',', ';', "\t", '|'];
+                        $bestDelim = ',';
+                        $bestCount = 0;
+                        foreach ($delims as $d) {
+                            $cnt = substr_count($line, $d);
+                            if ($cnt > $bestCount) {
+                                $bestCount = $cnt;
+                                $bestDelim = $d;
+                            }
+                        }
+
+                        $cols = str_getcsv($line, $bestDelim);
+                        if (empty($cols) || empty(trim($cols[0] ?? ''))) continue;
+
+                        if ($i === 0) {
+                            $h = mb_strtolower(trim($cols[0]));
+                            if (strpos($h, 'شماره') !== false || strpos($h, 'member') !== false || strpos($h, 'نام') !== false) {
+                                continue;
+                            }
+                        }
+
+                        $mNumber = trim($cols[0] ?? '', " \t\n\r\0\x0B\"'");
+                        $fullName = trim($cols[1] ?? '', " \t\n\r\0\x0B\"'");
+                        $nationalId = trim($cols[2] ?? '', " \t\n\r\0\x0B\"'");
+                        $phone = trim($cols[3] ?? '', " \t\n\r\0\x0B\"'");
+                        $email = trim($cols[4] ?? '', " \t\n\r\0\x0B\"'");
+
+                        if (!empty($fullName)) {
+                            if (empty($mNumber)) {
+                                $mNumber = 'LIB-' . rand(1000, 9999);
+                            }
+                            $memId = 'mem_' . md5($mNumber . '_' . $phone);
+                            $stmt->execute([
+                                ':id' => $memId,
+                                ':membership_number' => $mNumber,
+                                ':full_name' => $fullName,
+                                ':national_id' => $nationalId ?: null,
+                                ':phone_number' => $phone,
+                                ':email' => $email ?: null,
+                            ]);
+                            $imported++;
+                        }
+                    }
+
+                    $message = "تعداد {$imported} عضو با موفقیت از فایل اکسل/CSV در پنل ثبت شدند.";
+                    $messageType = 'success';
+                } catch (Exception $e) {
+                    $message = 'خطا در ثبت اعضای اکسل: ' . $e->getMessage();
+                    $messageType = 'error';
                 }
+            }
+        }
+    }
 
-                $mNumber = trim($cols[0] ?? '');
-                $fullName = trim($cols[1] ?? '');
-                $nationalId = trim($cols[2] ?? '');
-                $phone = trim($cols[3] ?? '');
-                $email = trim($cols[4] ?? '');
+    // ۵. ثبت تکی عضو جدید در پنل
+    if (isset($_POST['add_single_member'])) {
+        $tab = 'members';
+        if (!$dbConnected || !$pdo) {
+            $message = 'اتصال به دیتابیس برقرار نیست! لطفاً ابتدا از تب «اتصال دیتابیس و توکن» پایگاه داده را متصل نمایید.';
+            $messageType = 'error';
+        } else {
+            $mNumber = trim($_POST['membership_number'] ?? '');
+            $fullName = trim($_POST['full_name'] ?? '');
+            $nationalId = trim($_POST['national_id'] ?? '');
+            $phone = trim($_POST['phone_number'] ?? '');
+            $email = trim($_POST['email'] ?? '');
 
-                if (!empty($fullName)) {
+            if (empty($fullName) || empty($phone)) {
+                $message = 'نام و شماره تماس عضو الزامی است.';
+                $messageType = 'error';
+            } else {
+                try {
+                    autoMigrateDatabase($pdo);
                     if (empty($mNumber)) {
                         $mNumber = 'LIB-' . rand(1000, 9999);
                     }
-                    $memId = 'mem_' . md5($mNumber . '_' . $phone);
+                    $stmt = $pdo->prepare("
+                        INSERT INTO assistant_members (id, membership_number, full_name, national_id, phone_number, email, membership_date, status, borrowed_count, created_at)
+                        VALUES (:id, :membership_number, :full_name, :national_id, :phone_number, :email, NOW(), 'active', 0, NOW())
+                    ");
                     $stmt->execute([
-                        ':id' => $memId,
+                        ':id' => 'mem_' . uniqid('', true),
                         ':membership_number' => $mNumber,
                         ':full_name' => $fullName,
                         ':national_id' => $nationalId ?: null,
                         ':phone_number' => $phone,
                         ':email' => $email ?: null,
                     ]);
-                    $imported++;
+                    $message = 'عضو جدید با موفقیت به سامانه افزوده شد.';
+                    $messageType = 'success';
+                } catch (Exception $e) {
+                    $message = 'خطا در ثبت عضو: ' . $e->getMessage();
+                    $messageType = 'error';
                 }
             }
-
-            $message = "تعداد {$imported} عضو با موفقیت از فایل اکسل/CSV در پنل ثبت شدند.";
-            $messageType = 'success';
         }
     }
 
-    // ۵. ثبت تکی عضو جدید در پنل
-    if (isset($_POST['add_single_member']) && $dbConnected && $pdo) {
-        $tab = 'members';
-        $mNumber = trim($_POST['membership_number'] ?? '');
-        $fullName = trim($_POST['full_name'] ?? '');
-        $nationalId = trim($_POST['national_id'] ?? '');
-        $phone = trim($_POST['phone_number'] ?? '');
-        $email = trim($_POST['email'] ?? '');
-
-        if (empty($fullName) || empty($phone)) {
-            $message = 'نام و شماره تماس عضو الزامی است.';
-            $messageType = 'error';
-        } else {
-            if (empty($mNumber)) {
-                $mNumber = 'LIB-' . rand(1000, 9999);
-            }
-            $stmt = $pdo->prepare("
-                INSERT INTO assistant_members (id, membership_number, full_name, national_id, phone_number, email, membership_date, status, borrowed_count, created_at)
-                VALUES (:id, :membership_number, :full_name, :national_id, :phone_number, :email, NOW(), 'active', 0, NOW())
-            ");
-            $stmt->execute([
-                ':id' => 'mem_' . uniqid('', true),
-                ':membership_number' => $mNumber,
-                ':full_name' => $fullName,
-                ':national_id' => $nationalId ?: null,
-                ':phone_number' => $phone,
-                ':email' => $email ?: null,
-            ]);
-            $message = 'عضو جدید با موفقیت به سامانه افزوده شد.';
-            $messageType = 'success';
-        }
-    }
-
-    // ۶. ذخیره تنظیمات کلان سامانه
+    // ۶. ذخیره تنظیمات کلان سامانه و هویت بصری اپلیکیشن
     if (isset($_POST['save_global_settings']) && $dbConnected && $pdo) {
         $tab = 'settings';
         $settingsToSave = [
             'app_title' => trim($_POST['app_title'] ?? 'دستیار همراه هوشمند آناش'),
+            'app_icon' => trim($_POST['app_icon'] ?? ''),
+            'app_theme_mode' => trim($_POST['app_theme_mode'] ?? 'dark'),
+            'app_accent_color' => trim($_POST['app_accent_color'] ?? 'cyan'),
             'default_loan_days' => trim($_POST['default_loan_days'] ?? '14'),
             'max_books_per_member' => trim($_POST['max_books_per_member'] ?? '3'),
             'sms_reminder_template' => trim($_POST['sms_reminder_template'] ?? ''),
@@ -367,7 +533,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($settingsToSave as $k => $v) {
             $stmt->execute([':k' => $k, ':v' => $v]);
         }
-        $message = 'تنظیمات سراسری سامانه با موفقیت در پایگاه داده هاست ذخیره گردید.';
+        $message = 'تنظیمات سراسری سامانه و هویت ظاهری اپلیکیشن با موفقیت ذخیره شد و در اپلیکیشن همگام خواهد شد.';
         $messageType = 'success';
     }
 }
@@ -855,17 +1021,140 @@ $activeApiKey = defined('API_SECRET_KEY') ? API_SECRET_KEY : 'ANASH_KEY_2026';
 
         <!-- TAB 5: GLOBAL SETTINGS -->
         <?php if ($tab === 'settings'): ?>
-            <div class="p-6 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-4">
+            <div class="p-6 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-6">
                 <div class="border-b border-slate-800 pb-3">
                     <h2 class="text-sm font-black text-white flex items-center gap-2">
-                        <span>⚙ مرکز مدیریت تنظیمات کلان سامانه و اپلیکیشن</span>
+                        <span>⚙ مرکز مدیریت تنظیمات کلان، هویت بصری و اپلیکیشن</span>
                     </h2>
                     <p class="text-xs text-slate-400 mt-1">
-                        تنظیمات اصلی و قوانین سیستم کتابخانه و اپلیکیشن در این بخش مدیریت می‌شوند.
+                        آیکون اپلیکیشن، رنگ‌بندی شاخص، تم و قوانین عمومی سامانه و کتابخانه در این بخش مدیریت می‌شوند.
                     </p>
                 </div>
 
-                <form method="POST" class="space-y-4 text-xs">
+                <form method="POST" class="space-y-6 text-xs">
+                    <!-- SECTION A: VISUAL IDENTITY & APP ICON -->
+                    <div class="p-5 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-4">
+                        <div class="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
+                            <div class="flex items-center gap-2">
+                                <span class="text-base">🎨</span>
+                                <h3 class="font-bold text-white text-xs sm:text-sm">هویت بصری، نشان تجاری و آیکون اپلیکیشن</h3>
+                            </div>
+                            <span class="px-2.5 py-1 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-[10px] font-bold">
+                                مدیریت انحصاری از پنل
+                            </span>
+                        </div>
+
+                        <div class="p-3 rounded-xl bg-cyan-950/30 border border-cyan-800/40 text-cyan-200 text-[11px] leading-relaxed">
+                            💡 <strong>سیاست یکپارچگی نشان:</strong> دکمه و ابزار تغییر آیکون از محیط اپلیکیشن حذف شده و انتخاب نشان تجاری منحصراً از این پنل کنترل می‌شود. با ذخیره در این بخش، تمام دستگاه‌ها بلافاصله نشان و تم هماهنگ را نمایش می‌دهند.
+                        </div>
+
+                        <!-- Current Icon Live Preview & Preset Selection -->
+                        <div>
+                            <label class="block text-slate-300 mb-2 font-semibold">انتخاب از الگوهای لوکس آیکون یا درج نشان اختصاصی:</label>
+                            
+                            <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
+                                <!-- Preset 1 -->
+                                <button type="button" onclick="selectPresetIcon(1)" class="group p-3 rounded-2xl bg-slate-900 border border-slate-700/80 hover:border-cyan-500 transition-all text-center flex flex-col items-center gap-2">
+                                    <div class="w-12 h-12 rounded-xl p-0.5 bg-gradient-to-tr from-cyan-400 to-indigo-500 shadow-md">
+                                        <div class="w-full h-full bg-[#090f1d] rounded-[10px] flex items-center justify-center font-black text-cyan-300 text-lg">A</div>
+                                    </div>
+                                    <span class="text-[10px] text-slate-300 group-hover:text-cyan-300 font-semibold">نشان استودیو آناش</span>
+                                </button>
+
+                                <!-- Preset 2 -->
+                                <button type="button" onclick="selectPresetIcon(2)" class="group p-3 rounded-2xl bg-slate-900 border border-slate-700/80 hover:border-emerald-500 transition-all text-center flex flex-col items-center gap-2">
+                                    <div class="w-12 h-12 rounded-xl p-0.5 bg-gradient-to-tr from-emerald-400 to-teal-500 shadow-md">
+                                        <div class="w-full h-full bg-[#04120e] rounded-[10px] flex items-center justify-center text-emerald-400 text-lg font-mono">✦</div>
+                                    </div>
+                                    <span class="text-[10px] text-slate-300 group-hover:text-emerald-300 font-semibold">سایبر زمردی</span>
+                                </button>
+
+                                <!-- Preset 3 -->
+                                <button type="button" onclick="selectPresetIcon(3)" class="group p-3 rounded-2xl bg-slate-900 border border-slate-700/80 hover:border-amber-500 transition-all text-center flex flex-col items-center gap-2">
+                                    <div class="w-12 h-12 rounded-xl p-0.5 bg-gradient-to-tr from-amber-400 to-yellow-600 shadow-md">
+                                        <div class="w-full h-full bg-[#161005] rounded-[10px] flex items-center justify-center font-black text-amber-300 text-lg">A</div>
+                                    </div>
+                                    <span class="text-[10px] text-slate-300 group-hover:text-amber-300 font-semibold">طلایی لوکس</span>
+                                </button>
+
+                                <!-- Preset 4 -->
+                                <button type="button" onclick="selectPresetIcon(4)" class="group p-3 rounded-2xl bg-slate-900 border border-slate-700/80 hover:border-purple-500 transition-all text-center flex flex-col items-center gap-2">
+                                    <div class="w-12 h-12 rounded-xl p-0.5 bg-gradient-to-tr from-purple-400 to-pink-500 shadow-md">
+                                        <div class="w-full h-full bg-[#14051a] rounded-[10px] flex items-center justify-center text-purple-300 text-lg">★</div>
+                                    </div>
+                                    <span class="text-[10px] text-slate-300 group-hover:text-purple-300 font-semibold">نئون ارغوانی</span>
+                                </button>
+
+                                <!-- Preset 5 -->
+                                <button type="button" onclick="selectPresetIcon(5)" class="group p-3 rounded-2xl bg-slate-900 border border-slate-700/80 hover:border-sky-500 transition-all text-center flex flex-col items-center gap-2">
+                                    <div class="w-12 h-12 rounded-xl p-0.5 bg-gradient-to-tr from-sky-400 to-blue-600 shadow-md">
+                                        <div class="w-full h-full bg-[#061226] rounded-[10px] flex items-center justify-center text-sky-300 text-lg">📖</div>
+                                    </div>
+                                    <span class="text-[10px] text-slate-300 group-hover:text-sky-300 font-semibold">کتابخانه و دانش</span>
+                                </button>
+                            </div>
+
+                            <!-- Icon URL / SVG Data Input & Live Box -->
+                            <div class="flex items-start gap-4">
+                                <div class="w-16 h-16 rounded-2xl overflow-hidden p-0.5 bg-gradient-to-tr from-cyan-500 to-indigo-500 shrink-0 shadow-lg shadow-cyan-500/20">
+                                    <img id="icon_live_preview" src="<?php echo htmlspecialchars(!empty($globalSettings['app_icon']) ? $globalSettings['app_icon'] : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="26" fill="%23090f1d"/><text x="50" y="65" font-family="sans-serif" font-weight="900" font-size="44" text-anchor="middle" fill="%2306b6d4">A</text></svg>'); ?>" alt="Preview" class="w-full h-full object-cover rounded-[14px] bg-slate-950">
+                                </div>
+                                <div class="flex-1 space-y-1">
+                                    <label class="block text-slate-300 font-semibold">محتوای آیکون (Data URL تصویر یا SVG یا آدرس اینترنتی):</label>
+                                    <input type="text" id="app_icon_input" name="app_icon" value="<?php echo htmlspecialchars($globalSettings['app_icon'] ?? ''); ?>" placeholder="با کلیک روی گزینه‌های بالا پر می‌شود یا آدرس تصویر را وارد کنید" oninput="updateIconPreview(this.value)" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-[11px] dir-ltr">
+                                    <p class="text-[10px] text-slate-400">می‌توانید آدرس هر فایل PNG، WebP یا کدهای SVG استاندارد را در این فیلد قرار دهید.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Theme & Accent Dropdowns -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-800/80">
+                            <div>
+                                <label class="block text-slate-300 mb-1.5 font-semibold">تم ظاهری کلی اپلیکیشن:</label>
+                                <select name="app_theme_mode" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-medium">
+                                    <?php 
+                                    $currTheme = $globalSettings['app_theme_mode'] ?? 'dark';
+                                    $themes = [
+                                        'dark' => 'شبانه تیره استاندارد (Dark)',
+                                        'oled' => 'آمولد مشکی خالص (OLED Black)',
+                                        'light' => 'روز روشن و شفاف (Light)',
+                                        'cyber' => 'سایبر نئون با کنتراست بالا (Cyberpunk)',
+                                    ];
+                                    foreach ($themes as $tk => $tv):
+                                    ?>
+                                        <option value="<?php echo $tk; ?>" <?php echo $currTheme === $tk ? 'selected' : ''; ?>>
+                                            <?php echo $tv; ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-slate-300 mb-1.5 font-semibold">رنگ شاخص و هایلایت‌ها (Accent Color):</label>
+                                <select name="app_accent_color" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-medium">
+                                    <?php 
+                                    $currAccent = $globalSettings['app_accent_color'] ?? 'cyan';
+                                    $accents = [
+                                        'cyan' => 'فیروزه‌ای نئون (Cyan)',
+                                        'emerald' => 'زمردی باطراوت (Emerald)',
+                                        'indigo' => 'ایندیگو ملوکانه (Indigo)',
+                                        'amber' => 'کهربایی طلایی (Amber)',
+                                        'rose' => 'یاقوتی سرخ (Rose)',
+                                        'violet' => 'بنفش کریستالی (Violet)',
+                                        'sky' => 'آبی آسمانی (Sky)',
+                                    ];
+                                    foreach ($accents as $ak => $av):
+                                    ?>
+                                        <option value="<?php echo $ak; ?>" <?php echo $currAccent === $ak ? 'selected' : ''; ?>>
+                                            <?php echo $av; ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SECTION B: GENERAL & LIBRARY SETTINGS -->
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-slate-300 mb-1.5 font-semibold">عنوان برند و سامانه</label>
@@ -896,9 +1185,9 @@ $activeApiKey = defined('API_SECRET_KEY') ? API_SECRET_KEY : 'ANASH_KEY_2026';
                         <textarea name="sms_reminder_template" rows="3" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white placeholder-slate-600"><?php echo htmlspecialchars($globalSettings['sms_reminder_template'] ?? 'با سلام و احترام، موعد بازگشت کتاب به کتابخانه فرارسیده است. لطفاً جهت استرداد یا تمدید اقدام فرمایید.'); ?></textarea>
                     </div>
 
-                    <div class="pt-2">
-                        <button type="submit" name="save_global_settings" class="px-6 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs transition-all shadow-lg shadow-cyan-600/30">
-                            ذخیره تنظیمات سامانه
+                    <div class="pt-2 flex items-center gap-3">
+                        <button type="submit" name="save_global_settings" class="px-7 py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs transition-all shadow-lg shadow-cyan-600/30">
+                            💾 ذخیره تنظیمات سامانه و اعمال هویت بصری
                         </button>
                     </div>
                 </form>
@@ -976,6 +1265,32 @@ $activeApiKey = defined('API_SECRET_KEY') ? API_SECRET_KEY : 'ANASH_KEY_2026';
         function generateRandomToken() {
             const rand = 'ANASH_' + Math.random().toString(36).substring(2, 10).toUpperCase() + '_' + Math.floor(1000 + Math.random() * 9000);
             document.getElementById('custom_api_key').value = rand;
+        }
+
+        const PRESET_ICONS = {
+            1: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%2306b6d4"/><stop offset="50%" stop-color="%233b82f6"/><stop offset="100%" stop-color="%238b5cf6"/></linearGradient></defs><rect width="100" height="100" rx="26" fill="%23090f1d"/><rect x="2" y="2" width="96" height="96" rx="24" fill="none" stroke="url(%23grad)" stroke-width="3" opacity="0.8"/><path d="M50 18 L76 78 L62 78 L56 63 L44 63 L38 78 L24 78 Z M50 35 L47 53 L53 53 Z" fill="url(%23grad)"/><circle cx="50" cy="24" r="3.5" fill="%2338bdf8"/></svg>',
+            2: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="emg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%2310b981"/><stop offset="100%" stop-color="%2306b6d4"/></linearGradient></defs><rect width="100" height="100" rx="26" fill="%2304120e"/><rect x="3" y="3" width="94" height="94" rx="23" fill="none" stroke="url(%23emg)" stroke-width="3"/><path d="M50 16 L80 50 L50 84 L20 50 Z" fill="none" stroke="url(%23emg)" stroke-width="4"/><circle cx="50" cy="50" r="14" fill="url(%23emg)"/></svg>',
+            3: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="gld" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%23fbbf24"/><stop offset="100%" stop-color="%23d97706"/></linearGradient></defs><rect width="100" height="100" rx="26" fill="%23161005"/><rect x="3" y="3" width="94" height="94" rx="23" fill="none" stroke="url(%23gld)" stroke-width="3"/><text x="50" y="65" font-family="sans-serif" font-weight="900" font-size="44" text-anchor="middle" fill="url(%23gld)">A</text></svg>',
+            4: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="prp" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%23c084fc"/><stop offset="100%" stop-color="%23ec4899"/></linearGradient></defs><rect width="100" height="100" rx="26" fill="%2314051a"/><rect x="3" y="3" width="94" height="94" rx="23" fill="none" stroke="url(%23prp)" stroke-width="3"/><polygon points="50,18 78,74 22,74" fill="none" stroke="url(%23prp)" stroke-width="5"/><circle cx="50" cy="54" r="8" fill="url(%23prp)"/></svg>',
+            5: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="lb" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="%2338bdf8"/><stop offset="100%" stop-color="%232563eb"/></linearGradient></defs><rect width="100" height="100" rx="26" fill="%23061226"/><rect x="3" y="3" width="94" height="94" rx="23" fill="none" stroke="url(%23lb)" stroke-width="3"/><path d="M25 35 Q50 30 50 70 Q50 30 75 35 L75 65 Q50 60 50 75 Q50 60 25 65 Z" fill="none" stroke="url(%23lb)" stroke-width="4"/><circle cx="50" cy="22" r="5" fill="%2338bdf8"/></svg>'
+        };
+
+        function selectPresetIcon(id) {
+            const svgData = PRESET_ICONS[id];
+            if (svgData) {
+                const input = document.getElementById('app_icon_input');
+                if (input) {
+                    input.value = svgData;
+                    updateIconPreview(svgData);
+                }
+            }
+        }
+
+        function updateIconPreview(val) {
+            const preview = document.getElementById('icon_live_preview');
+            if (preview) {
+                preview.src = val ? val : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="26" fill="%23090f1d"/><text x="50" y="65" font-family="sans-serif" font-weight="900" font-size="44" text-anchor="middle" fill="%2306b6d4">A</text></svg>';
+            }
         }
     </script>
 </body>

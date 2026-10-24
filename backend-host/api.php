@@ -16,8 +16,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 require_once __DIR__ . '/config.php';
 
-// بررسی احراز هویت با کلید امنیتی (X-API-KEY یا پارامتر key در URL)
-$receivedKey = $_SERVER['HTTP_X_API_KEY'] ?? $_GET['key'] ?? '';
+// دریافت و بررسی کلید احراز هویت از سربرگ‌ها، Bearer Token یا پارامتر URL
+$receivedKey = $_SERVER['HTTP_X_API_KEY'] ?? $_SERVER['REDIRECT_HTTP_X_API_KEY'] ?? $_GET['key'] ?? $_POST['key'] ?? '';
+if (empty($receivedKey)) {
+    $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
+    if (empty($authHeader) && function_exists('apache_request_headers')) {
+        $headers = apache_request_headers();
+        $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
+        if (empty($receivedKey)) {
+            $receivedKey = $headers['X-API-KEY'] ?? $headers['x-api-key'] ?? '';
+        }
+    }
+    if (preg_match('/Bearer\s+(\S+)/i', $authHeader, $matches)) {
+        $receivedKey = $matches[1];
+    }
+}
+
 if ($receivedKey !== API_SECRET_KEY) {
     http_response_code(401);
     echo json_encode([
@@ -29,6 +43,34 @@ if ($receivedKey !== API_SECRET_KEY) {
 
 $action = $_GET['action'] ?? 'ping';
 $pdo = getDbConnection();
+
+// بروزرسانی خودکار ساختار دیتابیس در صورت نیاز
+try {
+    $cols = $pdo->query("SHOW COLUMNS FROM assistant_books")->fetchAll(PDO::FETCH_COLUMN);
+    if ($cols && count($cols) > 0) {
+        if (!in_array('translator', $cols)) {
+            $pdo->exec("ALTER TABLE `assistant_books` ADD COLUMN `translator` varchar(255) DEFAULT NULL AFTER `author`");
+        }
+        if (!in_array('publisher', $cols)) {
+            $pdo->exec("ALTER TABLE `assistant_books` ADD COLUMN `publisher` varchar(255) DEFAULT NULL AFTER `translator`");
+        }
+        if (!in_array('congress_code', $cols)) {
+            $pdo->exec("ALTER TABLE `assistant_books` ADD COLUMN `congress_code` varchar(64) DEFAULT NULL AFTER `publisher`");
+        }
+        if (!in_array('publish_year', $cols)) {
+            $pdo->exec("ALTER TABLE `assistant_books` ADD COLUMN `publish_year` varchar(32) DEFAULT NULL AFTER `congress_code`");
+        }
+        if (!in_array('shelf_location', $cols)) {
+            $pdo->exec("ALTER TABLE `assistant_books` ADD COLUMN `shelf_location` varchar(128) NOT NULL DEFAULT 'A-1' AFTER `category`");
+        }
+        if (!in_array('total_copies', $cols)) {
+            $pdo->exec("ALTER TABLE `assistant_books` ADD COLUMN `total_copies` int(11) NOT NULL DEFAULT 1 AFTER `shelf_location`");
+        }
+        if (!in_array('available_copies', $cols)) {
+            $pdo->exec("ALTER TABLE `assistant_books` ADD COLUMN `available_copies` int(11) NOT NULL DEFAULT 1 AFTER `total_copies`");
+        }
+    }
+} catch (Exception $e) {}
 
 switch ($action) {
     // ۱. تست پینگ و سلامت ارتباط
@@ -284,11 +326,18 @@ switch ($action) {
                 }
             }
 
+            $freshBooks = $pdo->query("SELECT * FROM assistant_books ORDER BY title ASC")->fetchAll();
+            $freshMembers = $pdo->query("SELECT * FROM assistant_members ORDER BY full_name ASC")->fetchAll();
+            $freshLoans = $pdo->query("SELECT * FROM assistant_loans ORDER BY loan_date DESC")->fetchAll();
+
             echo json_encode([
                 'success' => true,
                 'synced_books' => $booksCount,
                 'synced_members' => $membersCount,
                 'synced_loans' => $loansCount,
+                'books' => $freshBooks,
+                'members' => $freshMembers,
+                'loans' => $freshLoans,
                 'message' => 'همگام‌سازی اطلاعات کتابخانه با موفقیت روی هاست ثبت شد.'
             ], JSON_UNESCAPED_UNICODE);
         } else {

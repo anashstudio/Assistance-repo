@@ -11,7 +11,6 @@ interface HeaderProps {
   onTriggerSync: () => void;
   activeModulesCount?: number;
   appIcon?: string;
-  onOpenIconModal?: () => void;
   onOpenVersionModal?: () => void;
 }
 
@@ -45,7 +44,6 @@ export const Header: React.FC<HeaderProps> = ({
   onTriggerSync,
   activeModulesCount,
   appIcon,
-  onOpenIconModal,
   onOpenVersionModal,
 }) => {
   return (
@@ -53,29 +51,22 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
         {/* Brand & Active Page Title */}
         <div className="flex items-center gap-2.5 min-w-0">
-          {/* Custom App Icon (Clickable to change icon) */}
+          {/* App Branding Icon */}
           <div
-            onClick={onOpenIconModal}
-            className="group relative cursor-pointer active:scale-95 transition-transform"
-            title="کلیک برای تغییر آیکون برنامه"
+            onClick={onOpenVersionModal}
+            className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-cyan-500 to-purple-600 p-0.5 flex items-center justify-center shadow-lg shadow-cyan-500/20 shrink-0 cursor-pointer active:scale-95 transition-transform"
+            title="مشاهده مشخصات نسخه"
           >
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-cyan-500 to-purple-600 p-0.5 flex items-center justify-center shadow-lg shadow-cyan-500/20 shrink-0">
-              {appIcon ? (
-                <img
-                  src={appIcon}
-                  alt="App Icon"
-                  className="w-full h-full object-cover rounded-[14px] bg-[#090d16]"
-                />
-              ) : (
-                <div className="w-full h-full bg-[#090d16] rounded-[14px] flex items-center justify-center text-xs font-black text-cyan-400">
-                  آناش
-                </div>
-              )}
-            </div>
-            {onOpenIconModal && (
-              <span className="absolute -bottom-1 -left-1 w-4 h-4 rounded-full bg-cyan-500 text-slate-950 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm">
-                <Edit3 className="w-2.5 h-2.5" />
-              </span>
+            {appIcon ? (
+              <img
+                src={appIcon}
+                alt="App Icon"
+                className="w-full h-full object-cover rounded-[14px] bg-[#090d16]"
+              />
+            ) : (
+              <div className="w-full h-full bg-[#090d16] rounded-[14px] flex items-center justify-center text-xs font-black text-cyan-400">
+                آناش
+              </div>
             )}
           </div>
 

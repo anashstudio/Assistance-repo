@@ -17,7 +17,6 @@ import { Header } from './components/Header';
 import { Navigation } from './components/Navigation';
 import { LockScreen } from './components/LockScreen';
 import { ModuleManagerModal } from './components/modules/ModuleManagerModal';
-import { AppIconModal } from './components/AppIconModal';
 import { VersionChangelogModal } from './components/VersionChangelogModal';
 
 import { DashboardModule } from './components/modules/DashboardModule';
@@ -41,13 +40,22 @@ const DEFAULT_THEME: ThemeConfig = {
   compactMode: false,
 };
 
+const ACCENT_COLOR_MAP: Record<string, { color: string; hover: string; light: string; border: string; text: string; glow: string }> = {
+  cyan: { color: '#06b6d4', hover: '#0891b2', light: 'rgba(6,182,212,0.18)', border: 'rgba(6,182,212,0.45)', text: '#22d3ee', glow: 'rgba(6,182,212,0.35)' },
+  emerald: { color: '#10b981', hover: '#059669', light: 'rgba(16,185,129,0.18)', border: 'rgba(16,185,129,0.45)', text: '#34d399', glow: 'rgba(16,185,129,0.35)' },
+  indigo: { color: '#6366f1', hover: '#4f46e5', light: 'rgba(99,102,241,0.18)', border: 'rgba(99,102,241,0.45)', text: '#818cf8', glow: 'rgba(99,102,241,0.35)' },
+  amber: { color: '#f59e0b', hover: '#d97706', light: 'rgba(245,158,11,0.18)', border: 'rgba(245,158,11,0.45)', text: '#fbbf24', glow: 'rgba(245,158,11,0.35)' },
+  rose: { color: '#f43f5e', hover: '#e11d48', light: 'rgba(244,63,94,0.18)', border: 'rgba(244,63,94,0.45)', text: '#fb7185', glow: 'rgba(244,63,94,0.35)' },
+  violet: { color: '#8b5cf6', hover: '#7c3aed', light: 'rgba(139,92,246,0.18)', border: 'rgba(139,92,246,0.45)', text: '#a78bfa', glow: 'rgba(139,92,246,0.35)' },
+  sky: { color: '#0ea5e9', hover: '#0284c7', light: 'rgba(14,165,233,0.18)', border: 'rgba(14,165,233,0.45)', text: '#38bdf8', glow: 'rgba(14,165,233,0.35)' },
+};
+
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [isLocked, setIsLocked] = useState<boolean>(false);
   const [securitySettings, setSecuritySettings] = useState<SecuritySettings | null>(null);
   const [modulesConfig, setModulesConfig] = useState<AppModuleConfig[]>(INITIAL_MODULES_CONFIG);
   const [isModuleManagerOpen, setIsModuleManagerOpen] = useState<boolean>(false);
-  const [isIconModalOpen, setIsIconModalOpen] = useState<boolean>(false);
   const [isVersionModalOpen, setIsVersionModalOpen] = useState<boolean>(false);
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
@@ -63,11 +71,55 @@ export function App() {
     estimatedBytes: 0,
   });
 
-  // Apply theme attributes to document
+  // Apply theme attributes and dynamic CSS properties to documentElement
   const applyTheme = useCallback((cfg: ThemeConfig) => {
-    document.documentElement.setAttribute('data-theme', cfg.mode);
-    document.documentElement.setAttribute('data-accent', cfg.accentColor);
+    const root = document.documentElement;
+    root.setAttribute('data-theme', cfg.mode);
+    root.setAttribute('data-accent', cfg.accentColor);
+
+    const c = ACCENT_COLOR_MAP[cfg.accentColor] || ACCENT_COLOR_MAP['cyan'];
+    root.style.setProperty('--accent-color', c.color);
+    root.style.setProperty('--accent-hover', c.hover);
+    root.style.setProperty('--accent-light', c.light);
+    root.style.setProperty('--accent-border', c.border);
+    root.style.setProperty('--accent-text', c.text);
+    root.style.setProperty('--accent-glow', c.glow);
   }, []);
+
+  // Fetch host settings (such as app_icon, app_theme_mode, app_accent_color) configured in Web Panel
+  const syncHostGlobalSettings = useCallback(async () => {
+    try {
+      const config = await getHostingConfig();
+      if (!config.apiUrl) return;
+
+      const res = await fetch(`${config.apiUrl}?action=get_settings`, {
+        headers: { 'Authorization': `Bearer ${config.apiKey}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.settings) {
+          const s = data.settings;
+          if (s.app_icon) {
+            setAppIcon(s.app_icon);
+            await localDB.setSetting('app_custom_logo_icon_url', s.app_icon);
+          }
+          if (s.app_theme_mode || s.app_accent_color) {
+            const currentTheme = await localDB.getSetting<ThemeConfig>('app_theme_config', DEFAULT_THEME);
+            const updatedTheme: ThemeConfig = {
+              ...currentTheme,
+              mode: (s.app_theme_mode as any) || currentTheme.mode,
+              accentColor: (s.app_accent_color as any) || currentTheme.accentColor,
+            };
+            setThemeConfig(updatedTheme);
+            applyTheme(updatedTheme);
+            await localDB.setSetting('app_theme_config', updatedTheme);
+          }
+        }
+      }
+    } catch {
+      // Offline or server not reached
+    }
+  }, [applyTheme]);
 
   // Load initial settings, modules configuration, theme, and stats
   const refreshStorageStats = useCallback(async () => {
@@ -103,6 +155,9 @@ export function App() {
         applyTheme(savedTheme);
       });
 
+    // Check host settings asynchronously
+    syncHostGlobalSettings();
+
     // Load custom modules state
     localDB.getSetting<AppModuleConfig[]>('app_modules_registry', INITIAL_MODULES_CONFIG)
       .then((savedModules) => {
@@ -121,7 +176,7 @@ export function App() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [refreshStorageStats, applyTheme]);
+  }, [refreshStorageStats, applyTheme, syncHostGlobalSettings]);
 
   const handleUpdateTheme = (newTheme: ThemeConfig) => {
     setThemeConfig(newTheme);
@@ -196,7 +251,6 @@ export function App() {
           savedPinHash={securitySettings.pinHash}
           isBiometricEnabled={securitySettings.isBiometricEnabled}
           appIcon={appIcon}
-          onOpenIconModal={() => setIsIconModalOpen(true)}
         />
       ) : (
         <>
@@ -210,7 +264,6 @@ export function App() {
             onTriggerSync={handleTriggerSync}
             activeModulesCount={enabledCount}
             appIcon={appIcon}
-            onOpenIconModal={() => setIsIconModalOpen(true)}
             onOpenVersionModal={() => setIsVersionModalOpen(true)}
           />
 
@@ -289,7 +342,6 @@ export function App() {
                 themeConfig={themeConfig}
                 onUpdateTheme={handleUpdateTheme}
                 appIcon={appIcon}
-                onOpenIconModal={() => setIsIconModalOpen(true)}
                 onOpenVersionModal={() => setIsVersionModalOpen(true)}
               />
             )}
@@ -310,14 +362,6 @@ export function App() {
             modules={modulesConfig}
             onToggleModule={handleToggleModule}
             onResetDefaults={handleResetDefaults}
-          />
-
-          {/* Custom App Icon Picker Modal */}
-          <AppIconModal
-            isOpen={isIconModalOpen}
-            onClose={() => setIsIconModalOpen(false)}
-            currentIcon={appIcon}
-            onIconUpdated={(newIcon) => setAppIcon(newIcon)}
           />
 
           {/* Detailed Version & Changelog Modal */}

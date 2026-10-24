@@ -33,7 +33,6 @@ interface AboutModuleProps {
   themeConfig?: ThemeConfig;
   onUpdateTheme?: (theme: ThemeConfig) => void;
   appIcon?: string;
-  onOpenIconModal?: () => void;
   onOpenVersionModal?: () => void;
 }
 
@@ -48,7 +47,6 @@ export const AboutModule: React.FC<AboutModuleProps> = ({
   themeConfig = DEFAULT_THEME,
   onUpdateTheme,
   appIcon,
-  onOpenIconModal,
   onOpenVersionModal,
 }) => {
   const [security, setSecurity] = useState<SecuritySettings | null>(null);
@@ -193,26 +191,32 @@ export const AboutModule: React.FC<AboutModuleProps> = ({
         </button>
       </div>
 
-      {/* App Icon Customizer Section */}
+      {/* App Icon Branding Section (Managed exclusively from Web Host Panel) */}
       <div className="p-5 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-3 shadow-xl">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2">
             <ImageIcon className="w-4 h-4 text-cyan-400" />
-            <h3 className="text-sm font-bold text-white">آیکون و لوگوی برنامه</h3>
+            <h3 className="text-sm font-bold text-white">آیکون و نشان تجاری اپلیکیشن</h3>
           </div>
-          <button
-            onClick={onOpenIconModal}
-            className="px-3 py-1.5 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/30 text-xs font-semibold transition-all active:scale-95"
-          >
-            تغییر آیکون برنامه
-          </button>
+          <span className="px-2.5 py-1 rounded-full bg-slate-800 text-[10px] text-cyan-300 font-semibold border border-slate-700">
+            مدیریت از پنل وب
+          </span>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl overflow-hidden p-0.5 bg-gradient-to-tr from-cyan-500 to-indigo-500 shrink-0">
-            <img src={appIcon} alt="Current Icon" className="w-full h-full object-cover rounded-[14px] bg-slate-950" />
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl overflow-hidden p-0.5 bg-gradient-to-tr from-cyan-500 to-indigo-500 shrink-0 shadow-lg shadow-cyan-500/20">
+            {appIcon ? (
+              <img src={appIcon} alt="Current Icon" className="w-full h-full object-cover rounded-[14px] bg-slate-950" />
+            ) : (
+              <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
+                <Sparkles className="w-6 h-6 text-cyan-400" />
+              </div>
+            )}
           </div>
-          <div className="text-xs text-slate-300">
-            <p>می‌توانید هر تصویر دلخواهی را از گالری گوشی بارگذاری کنید تا جایگزین آیکون برنامه شود.</p>
+          <div className="text-xs text-slate-300 space-y-1">
+            <p className="font-semibold text-slate-200">آیکون فعال برنامه</p>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              تغییر آیکون و لوگوی برنامه طبق سیاست یکپارچگی، منحصراً از بخش «تنظیمات سامانه» در پنل مدیریت تحت‌وب هاست انجام شده و بلافاصله در اپلیکیشن اعمال می‌گردد.
+            </p>
           </div>
         </div>
       </div>
@@ -221,12 +225,12 @@ export const AboutModule: React.FC<AboutModuleProps> = ({
       <div className="p-5 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-4 shadow-xl">
         <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
           <Palette className="w-4 h-4 text-cyan-400" />
-          <h3 className="text-sm font-bold text-white">تنظیمات قالب و ظاهر برنامه</h3>
+          <h3 className="text-sm font-bold text-white">تنظیمات قالب و ظاهر زنده برنامه</h3>
         </div>
 
         {/* Theme Modes */}
         <div className="space-y-1.5">
-          <span className="text-xs text-slate-400 font-medium block">حالت نمایش و تم:</span>
+          <span className="text-xs text-slate-400 font-medium block">حالت نمایش و تم کلی:</span>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[
               { id: 'dark', label: 'شبانه تیره', icon: <Moon className="w-3.5 h-3.5" /> },
@@ -239,7 +243,7 @@ export const AboutModule: React.FC<AboutModuleProps> = ({
                 onClick={() => handleSelectThemeMode(t.id as any)}
                 className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
                   theme.mode === t.id
-                    ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300 shadow-sm'
+                    ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 shadow-md ring-1 ring-cyan-500'
                     : 'bg-slate-800/60 border-slate-700/60 text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -252,27 +256,29 @@ export const AboutModule: React.FC<AboutModuleProps> = ({
 
         {/* Accent Color */}
         <div className="space-y-1.5 pt-2">
-          <span className="text-xs text-slate-400 font-medium block">رنگ شاخص و هایلایت‌ها:</span>
-          <div className="flex items-center gap-3">
+          <span className="text-xs text-slate-400 font-medium block">رنگ شاخص، هایلایت‌ها و دکمه‌ها:</span>
+          <div className="flex flex-wrap items-center gap-2.5">
             {[
               { id: 'cyan', color: '#06b6d4', label: 'فیروزه‌ای' },
-              { id: 'indigo', color: '#6366f1', label: 'ایندیگو' },
               { id: 'emerald', color: '#10b981', label: 'زمردی' },
+              { id: 'indigo', color: '#6366f1', label: 'ایندیگو' },
               { id: 'amber', color: '#f59e0b', label: 'کهربایی' },
               { id: 'rose', color: '#f43f5e', label: 'یاقوتی' },
+              { id: 'violet', color: '#8b5cf6', label: 'بنفش' },
+              { id: 'sky', color: '#0ea5e9', label: 'آبی آسمانی' },
             ].map((c) => (
               <button
                 key={c.id}
                 onClick={() => handleSelectAccent(c.id as any)}
-                className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+                className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
                   theme.accentColor === c.id
-                    ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900 scale-110'
-                    : 'opacity-70 hover:opacity-100'
+                    ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900 scale-110 shadow-lg'
+                    : 'opacity-70 hover:opacity-100 hover:scale-105'
                 }`}
                 style={{ backgroundColor: c.color }}
                 title={c.label}
               >
-                {theme.accentColor === c.id && <CheckCircle2 className="w-4 h-4 text-white" />}
+                {theme.accentColor === c.id && <CheckCircle2 className="w-5 h-5 text-white drop-shadow" />}
               </button>
             ))}
           </div>

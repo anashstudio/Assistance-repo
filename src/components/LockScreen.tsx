@@ -8,7 +8,6 @@ interface LockScreenProps {
   savedPinHash: string;
   isBiometricEnabled: boolean;
   appIcon?: string;
-  onOpenIconModal?: () => void;
 }
 
 const KEYPAD_DIGITS = [
@@ -28,7 +27,6 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   savedPinHash,
   isBiometricEnabled,
   appIcon,
-  onOpenIconModal,
 }) => {
   const [pin, setPin] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -144,13 +142,9 @@ export const LockScreen: React.FC<LockScreenProps> = ({
           <span>{currentDateFa}</span>
         </div>
 
-        {/* Brand Icon Badge (Clickable to change icon if handler exists) */}
+        {/* Brand Icon Emblem */}
         <div className="pt-4 flex flex-col items-center">
-          <div
-            onClick={onOpenIconModal}
-            className="group relative cursor-pointer active:scale-95 transition-transform"
-            title="کلیک برای تغییر آیکون برنامه"
-          >
+          <div className="relative">
             <div className="w-16 h-16 rounded-3xl p-0.5 bg-gradient-to-tr from-cyan-400 via-indigo-500 to-purple-500 shadow-xl shadow-cyan-500/25 flex items-center justify-center">
               {appIcon ? (
                 <img
@@ -164,11 +158,6 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                 </div>
               )}
             </div>
-            {onOpenIconModal && (
-              <span className="absolute -bottom-1 -left-1 px-1.5 py-0.2 rounded-full bg-cyan-500 text-[8px] font-bold text-slate-950 shadow-md">
-                تغییر
-              </span>
-            )}
           </div>
           <h2 className="text-base font-black text-slate-100 tracking-wide mt-2">
             دستیار همراه هوشمند آناش
